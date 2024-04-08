@@ -9,7 +9,7 @@ from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.scaler import StandardScaler
 
 
-class TD3BCPolicy(TD3Policy):
+class NoTrainingPolicy(TD3Policy):
     """
     TD3+BC <Ref: https://arxiv.org/abs/2106.06860>
     """
@@ -73,52 +73,22 @@ class TD3BCPolicy(TD3Policy):
     def select_action(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
         if self.scaler is not None:
             obs = self.scaler.transform(obs)
-        with torch.no_grad():
-            action = self.actor(obs).cpu().numpy()
+        if deterministic:
+            with torch.no_grad():
+                action = self.actor(obs).mode()[0].cpu().numpy()
         if not deterministic:
-            action = action + self.exploration_noise(action.shape)
-            action = np.clip(action, -self._max_action, self._max_action)
+            with torch.no_grad():
+                action = self.actor(obs).rsample()[0].cpu().numpy()
         return action
+    
+
     
     def learn(self, batch: Dict) -> Dict[str, float]:
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]
         
-        # update critic
-        q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
-        with torch.no_grad():
-            noise = 0*(torch.randn_like(actions) * self._policy_noise).clamp(-self._noise_clip, self._noise_clip)
-            next_actions = (self.actor_old(next_obss) + noise).clamp(-self._max_action, self._max_action)
-            next_q = torch.min(self.critic1_old(next_obss, next_actions), self.critic2_old(next_obss, next_actions))
-            target_q = rewards + self._gamma * (1 - terminals) * next_q
-        
-        critic1_loss = ((q1 - target_q).pow(2)).mean()
-        critic2_loss = ((q2 - target_q).pow(2)).mean()
-
-        self.critic1_optim.zero_grad()
-        critic1_loss.backward()
-        self.critic1_optim.step()
-
-        self.critic2_optim.zero_grad()
-        critic2_loss.backward()
-        self.critic2_optim.step()
-
-        # update actor
-        if self._cnt % self._freq == 0:
-            a = self.actor(obss)
-            q = self.critic1(obss, a)
-            lmbda = self._alpha / q.abs().mean().detach()
-            actor_loss = -lmbda * q.mean() + ((a - actions).pow(2)).mean()
-            self.actor_optim.zero_grad()
-            actor_loss.backward()
-            self.actor_optim.step()
-            self._last_actor_loss = actor_loss.item()
-            self._sync_weight()
-        
-        self._cnt += 1
-
         return {
-            "loss/actor": self._last_actor_loss,
-            "loss/critic1": critic1_loss.item(),
-            "loss/critic2": critic2_loss.item()
+            "loss/actor": 0,
+            "loss/critic1": 0,
+            "loss/critic2": 0
         }

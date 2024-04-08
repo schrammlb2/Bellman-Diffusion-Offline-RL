@@ -72,7 +72,8 @@ class DiagGaussian(nn.Module):
         if not self._unbounded:
             mu = self._max * torch.tanh(mu)
         if self._c_sigma:
-            sigma = torch.clamp(self.sigma(logits), min=self._sigma_min, max=self._sigma_max).exp()
+            # sigma = torch.clamp(self.sigma(logits), min=self._sigma_min, max=self._sigma_max).exp()
+            sigma = torch.clamp(self.sigma(logits) + self._sigma_min, min=self._sigma_min, max=self._sigma_max).exp()
         else:
             shape = [1] * len(mu.shape)
             shape[1] = -1

@@ -50,6 +50,9 @@ def merge_csv(root_dir, query_file, query_x, query_y):
         assert len(set(array[:, 0])) == 1, (set(array[:, 0]), array[:, 0])
         line = [rows[0][0], round(array[:, 1].mean(), 4), round(array[:, 1].std(), 4)]
         content.append(line)
+    keys_list = list(results.keys())
+    # import ipdb
+    # ipdb.set_trace()
     output_path = os.path.join(root_dir, query_y.replace('/', '_')+".csv")
     print(f"Output merged csv file to {output_path} with {len(content[1:])} lines.")
     csv.writer(open(output_path, "w")).writerows(content)
@@ -151,8 +154,15 @@ def plot_func(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="plotter")
     parser.add_argument("--root-dir", default="log")
-    parser.add_argument("--task", default="hopper-medium-expert-v2")
-    parser.add_argument("--algos", type=str, nargs='*', default=["mobile&penalty_coef=1.5&rollout_length=5&real_ratio=0.05&auto_alpha=True"])
+    # parser.add_argument("--task", default="hopper-medium-expert-v2")
+    parser.add_argument("--task", default="hopper-medium-v2")
+    parser.add_argument("--algos", type=str, nargs='*', default=
+        # ["mobile&penalty_coef=1.5&rollout_length=5&real_ratio=0.05&auto_alpha=True"],
+        # ["cql", "td3bc", "sacbc", "som_regularized_sac"],
+        # ["som_regularized_sac"],
+        # ["som_reg_only", "no_training", "sacbc", "kl_bc", "som_regularized_sac"],
+        ["cql", "td3bc", "iql", "som_regularized_sac", "som_reg_only"],
+    )
     parser.add_argument("--query-file", default="policy_training_progress.csv")
     parser.add_argument("--query-x", default="timestep")
     parser.add_argument("--query-y", default="eval/normalized_episode_reward")
@@ -162,7 +172,8 @@ if __name__ == "__main__":
     parser.add_argument("--smooth", type=int, default=10)
     parser.add_argument("--colors", type=str, nargs='*', default=None)
     parser.add_argument("--show", action='store_true')
-    parser.add_argument("--output-path", default="./hopper-medium-expert.png")
+    # parser.add_argument("--output-path", default="./hopper-medium-expert.png")
+    parser.add_argument("--output-path", default="./hopper-medium.png")
     parser.add_argument("--figsize", type=float, nargs=2, default=(8, 6))
     parser.add_argument("--dpi", type=int, default=500)
     args = parser.parse_args()
