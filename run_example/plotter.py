@@ -161,7 +161,13 @@ if __name__ == "__main__":
         # ["cql", "td3bc", "sacbc", "som_regularized_sac"],
         # ["som_regularized_sac"],
         # ["som_reg_only", "no_training", "sacbc", "kl_bc", "som_regularized_sac"],
-        ["cql", "td3bc", "iql", "som_regularized_sac", "som_reg_only"],
+        # ["cql", "td3bc", "iql", "som_reg_only"],
+        # ["cql", "td3bc", "iql", "som_regularized_sac", "som_reg_only"],
+        # ["som_reg_only"],
+        # ["som_regularized_sac", "diffusion_only"]
+        # ["som_regularized_sac", "state_reg_only", "cql"],
+        # ["som_regularized_sac", "cql",]
+        ["som_regularized_sac", "iql"]
     )
     parser.add_argument("--query-file", default="policy_training_progress.csv")
     parser.add_argument("--query-x", default="timestep")
@@ -173,7 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--colors", type=str, nargs='*', default=None)
     parser.add_argument("--show", action='store_true')
     # parser.add_argument("--output-path", default="./hopper-medium-expert.png")
-    parser.add_argument("--output-path", default="./hopper-medium.png")
+    # parser.add_argument("--output-path", default="./hopper-medium.png")
     parser.add_argument("--figsize", type=float, nargs=2, default=(8, 6))
     parser.add_argument("--dpi", type=int, default=500)
     args = parser.parse_args()
@@ -195,7 +201,10 @@ if __name__ == "__main__":
         dpi=args.dpi,
         color_list=args.colors
     )
-    if args.output_path:
-        plt.savefig(args.output_path)
-    if args.show:
-        plt.show()
+    task_name = "-".join(args.task.split("-")[:-1])
+    output_path = f"./{task_name}.png"
+    plt.savefig(output_path)
+    # if args.output_path:
+    #     plt.savefig(output_path)
+    # if args.show:
+    #     plt.show()

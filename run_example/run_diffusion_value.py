@@ -8,7 +8,8 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+# from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, MPMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
@@ -16,7 +17,8 @@ from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SOMRegOnlyPolicy
+# from offlinerlkit.policy import SOMRegularizedSACPolicy
+from offlinerlkit.policy import DiffusionValuePolicy
 
 
 """
@@ -27,9 +29,11 @@ alpha=2.5 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="som_reg_only")
+    parser.add_argument("--algo-name", type=str, default="diffusion_only")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256])
+    # parser.add_argument("--hidden-dims", type=int, nargs='*', default=[1024, 1024])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -38,7 +42,9 @@ def get_args():
     parser.add_argument("--policy-noise", type=float, default=0.2)
     parser.add_argument("--noise-clip", type=float, default=0.5)
     parser.add_argument("--update-actor-freq", type=int, default=2)
-    parser.add_argument("--alpha", type=float, default=2.5)
+    # parser.add_argument("--alpha", type=float, default=2.5)
+    parser.add_argument("--action_reg_weight", type=float, default=0.1)
+    parser.add_argument("--state_reg_weight", type=float, default=10.)
     parser.add_argument("--num_diffusion_iters", type=int, default=10)
     parser.add_argument("--epoch", type=int, default=1000)
     parser.add_argument("--step-per-epoch", type=int, default=1000)
@@ -81,11 +87,11 @@ def train(args=get_args()):
 
     # create policy model
     # h=256
-    h=1024
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    # # h=512
+    backbone = MLP
+    actor_backbone = backbone(input_dim=np.prod(args.obs_shape), hidden_dims=args.hidden_dims)
+    obs_diffusion_backbone = backbone(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=args.hidden_dims)
+    reward_diffusion_backbone = backbone(input_dim=np.prod(args.obs_shape)+args.action_dim + 2, hidden_dims=args.hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -95,28 +101,31 @@ def train(args=get_args()):
     )
     actor = ActorProb(actor_backbone, dist, args.device)
 
-    critic1 = Critic(critic1_backbone, args.device)
-    critic2 = Critic(critic2_backbone, args.device)
-    diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args.obs_shape), device=args.device)
+    obs_diffusion_model = DiffusionModel(
+        obs_diffusion_backbone, 
+        obs_dim=np.prod(args.obs_shape), device=args.device
+    )
+    reward_diffusion_model = DiffusionModel(
+        reward_diffusion_backbone, 
+        obs_dim=1, device=args.device
+    )
+
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
-    critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
-    critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
-    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr)
+    obs_diffusion_optim = torch.optim.Adam(obs_diffusion_model.parameters(), lr=args.critic_lr)
+    reward_diffusion_optim = torch.optim.Adam(reward_diffusion_model.parameters(), lr=args.critic_lr)
 
 
     # scaler for normalizing observations
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SOMRegOnlyPolicy(
+    policy = DiffusionValuePolicy(
         actor,
-        critic1,
-        critic2,
-        diffusion_model,
+        obs_diffusion_model,
+        reward_diffusion_model,
         actor_optim,
-        critic1_optim,
-        critic2_optim,
-        diffusion_optim,
+        obs_diffusion_optim,
+        reward_diffusion_optim,
         tau=args.tau,
         gamma=args.gamma,
         max_action=args.max_action,
@@ -124,7 +133,8 @@ def train(args=get_args()):
         policy_noise=args.policy_noise,
         noise_clip=args.noise_clip,
         update_actor_freq=args.update_actor_freq,
-        alpha=args.alpha,
+        action_reg_weight=args.action_reg_weight,
+        state_reg_weight=args.state_reg_weight,
         num_diffusion_iters=args.num_diffusion_iters,
         scaler=scaler
     )

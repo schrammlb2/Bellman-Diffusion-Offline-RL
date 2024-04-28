@@ -16,7 +16,7 @@ from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SOMRegOnlyPolicy
+from offlinerlkit.policy import SOMDiagnosticPolicy
 
 
 """
@@ -30,6 +30,7 @@ def get_args():
     parser.add_argument("--algo-name", type=str, default="som_reg_only")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -80,12 +81,18 @@ def train(args=get_args()):
     env.seed(args.seed)
 
     # create policy model
-    # h=256
-    h=1024
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    single_eval_hidden_dims = args.hidden_dims
+    single_eval_hidden_dims = [256, 256, 256]
+    # single_eval_hidden_dims = [512, 512, 512]
+    backbone = MLP
+    actor_backbone = backbone(input_dim=np.prod(args.obs_shape), 
+        hidden_dims=single_eval_hidden_dims)
+    critic1_backbone = backbone(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    critic2_backbone = backbone(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    diffusion_backbone = backbone(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, 
+        hidden_dims=args.hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -108,7 +115,7 @@ def train(args=get_args()):
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SOMRegOnlyPolicy(
+    policy = SOMDiagnosticPolicy(
         actor,
         critic1,
         critic2,

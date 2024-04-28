@@ -15,7 +15,7 @@ from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.scaler import StandardScaler
 
 
-class SOMRegularizedSACPolicy(TD3Policy):
+class VarianceReducedSOMPolicy(TD3Policy):
     """
     TD3+BC <Ref: https://arxiv.org/abs/2106.06860>
     """
@@ -26,10 +26,12 @@ class SOMRegularizedSACPolicy(TD3Policy):
         critic1: nn.Module,
         critic2: nn.Module,
         diffusion_model: nn.Module,
+        data_diffusion_model: nn.Module,
         actor_optim: torch.optim.Optimizer,
         critic1_optim: torch.optim.Optimizer,
         critic2_optim: torch.optim.Optimizer,
         diffusion_model_optim: torch.optim.Optimizer,
+        data_diffusion_model_optim: torch.optim.Optimizer,
         tau: float = 0.005,
         gamma: float  = 0.99,
         max_action: float = 1.0,
@@ -37,8 +39,7 @@ class SOMRegularizedSACPolicy(TD3Policy):
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
         update_actor_freq: int = 2,
-        action_reg_weight: float = 0.1,
-        state_reg_weight: float = 10.,
+        alpha: float = 2.5,
         num_diffusion_iters: int = 10,
         scaler: StandardScaler = None
     ) -> None:
@@ -59,13 +60,20 @@ class SOMRegularizedSACPolicy(TD3Policy):
             update_actor_freq=update_actor_freq
         )
 
-        # self._alpha = alpha
-        self.action_reg_weight = action_reg_weight
-        self.state_reg_weight = state_reg_weight
+
+        self.action_reg_weight = 0.1
+        self.state_reg_weight = 10
+
+        self._alpha = alpha
         self.scaler = scaler
         self.diffusion_model = diffusion_model
         self.diffusion_model_old = deepcopy(diffusion_model)
         self.diffusion_model_optim = diffusion_model_optim
+
+        self.data_diffusion_model = data_diffusion_model
+        self.data_diffusion_model_old = deepcopy(data_diffusion_model)
+        self.data_diffusion_model_optim = data_diffusion_model_optim
+
 
         self.num_diffusion_iters = num_diffusion_iters
         self.noise_scheduler = DDPMScheduler(
@@ -81,12 +89,14 @@ class SOMRegularizedSACPolicy(TD3Policy):
         self.critic1.train()
         self.critic2.train()
         self.diffusion_model.train()
+        self.data_diffusion_model.train()
 
     def eval(self) -> None:
         self.actor.eval()
         self.critic1.eval()
         self.critic2.eval()
         self.diffusion_model.eval()
+        self.data_diffusion_model.eval()
 
     def _sync_weight(self) -> None:
         for o, n in zip(self.actor_old.parameters(), self.actor.parameters()):
@@ -96,6 +106,8 @@ class SOMRegularizedSACPolicy(TD3Policy):
         for o, n in zip(self.critic2_old.parameters(), self.critic2.parameters()):
             o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
         for o, n in zip(self.diffusion_model_old.parameters(), self.diffusion_model.parameters()):
+            o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
+        for o, n in zip(self.data_diffusion_model_old.parameters(), self.data_diffusion_model.parameters()):
             o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
     
 
@@ -204,13 +216,22 @@ class SOMRegularizedSACPolicy(TD3Policy):
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
 
+    def select_action(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
+        if self.scaler is not None:
+            obs = self.scaler.transform(obs)
+            with torch.no_grad():
+                action = self.actor(obs).mode()[0].cpu().numpy()
+        if not deterministic:
+            with torch.no_grad():
+                action = self.actor(obs).rsample()[0].cpu().numpy()
+        return action
     
     def predict(self, noise, obs, a):
         map_i = lambda t: -1 + 2*t/self.num_diffusion_iters
 
         x = noise
         x_list = []
-        diff_steps = torch.ones((obs.shape[0],1))#, device=self.device)
+        diff_steps = torch.ones((x.shape[0],1))#, device=self.device)
         for i in range(self.num_diffusion_iters-1, 0, -1):
             epsilon_prediction = self.diffusion_model_old(
                 x=x, obs=obs, 
@@ -224,16 +245,6 @@ class SOMRegularizedSACPolicy(TD3Policy):
             x_list.append(x)
         
         return x#, torch.stack(x_list, 0)
-        
-    def select_action(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        if self.scaler is not None:
-            obs = self.scaler.transform(obs)
-            with torch.no_grad():
-                action = self.actor(obs).mode()[0].cpu().numpy()
-        if not deterministic:
-            with torch.no_grad():
-                action = self.actor(obs).rsample()[0].cpu().numpy()
-        return action
   
     def learn(self, batch: Dict) -> Dict[str, float]:
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
@@ -244,11 +255,10 @@ class SOMRegularizedSACPolicy(TD3Policy):
         # update critic
         q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
         with torch.no_grad():
-            next_actions = self.actor_old(next_obss).rsample()[0]
-            # next_actions = self.actor_old(next_obss).mode()[0]
+            # next_actions = self.actor_old(next_obss).rsample()[0]
+            next_actions = self.actor_old(next_obss).mode()[0]
             next_q = torch.min(self.critic1_old(next_obss, next_actions), self.critic2_old(next_obss, next_actions))
             target_q = rewards + self._gamma * (1 - terminals) * next_q
-
 
             batch_size = rewards.shape[0]
             diff_steps = torch.randint(0, 
@@ -261,91 +271,40 @@ class SOMRegularizedSACPolicy(TD3Policy):
             next_diff_obss = self.predict(
                     noise=obss_noise, obs=next_obss, a=next_actions
             ).detach()
-
-        diffusion_list = []
-        # n=10
-        n_iters = 1#self.num_diffusion_iters
-
-        meta_batch_sampling =  True
-        if meta_batch_sampling:
-            noised_obss_list = []
-            next_noised_obss_list = []
-            diff_steps_list = []
-            for _ in range(n_iters):
-                with torch.no_grad():
-                    diff_steps = torch.randint(0, 
-                        self.num_diffusion_iters, 
-                        (batch_size, 1)
-                    ).long().to(obss.device)
-                    obss_noise = torch.randn(obss.shape, device=obss.device)
-                    noised_obss_list.append(self.add_noise(next_obss, obss_noise, diff_steps))
-                    next_noised_obss_list.append(self.add_noise(next_diff_obss, obss_noise, diff_steps))
-
-
-                    diff_steps_list.append(diff_steps)
-
-
-            noised_obss_tens = torch.cat(noised_obss_list, 0)
-            next_noised_obss_tens = torch.cat(next_noised_obss_list, 0)
-
-            diff_steps_tens = torch.cat(diff_steps_list, 0)
-
-            obss_tens = torch.cat([obss]*n_iters, 0)
-            next_obss_tens = torch.cat([next_obss]*n_iters, 0)
-            actions_tens = torch.cat([actions]*n_iters, 0)
-            next_actions_tens = torch.cat([next_actions]*n_iters, 0)
-
+            next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
             next_target = self.diffusion_model_old(
-                x=next_noised_obss_tens, obs=next_obss_tens, 
-                step=map_i(diff_steps_tens),
-                actions=next_actions_tens).detach()
+                x=next_noised_obss, obs=next_obss, 
+                step=map_i(diff_steps),
+                actions=next_actions).detach()
 
+        current_prediction = self.diffusion_model(
+            x=noised_obss, obs=obss, 
+            step=map_i(diff_steps),
+            actions=actions)
+        next_prediction = self.diffusion_model(
+            x=next_noised_obss, obs=obss, 
+            step=map_i(diff_steps),
+            actions=actions)
 
-            current_prediction = self.diffusion_model(
-                x=noised_obss_tens, obs=obss_tens, 
-                step=map_i(diff_steps_tens),
-                actions=actions_tens)
-            next_prediction = self.diffusion_model(
-                x=next_noised_obss_tens, obs=obss_tens, 
-                step=map_i(diff_steps_tens),
-                actions=actions_tens)
-
-            diffusion_loss = (
-                (1-self._gamma)*(current_prediction - next_obss_tens)**2 + 
-                (self._gamma  )*(next_prediction - next_target)**2
-            ).mean()
-
-        else:
-            for _ in range(n_iters):
-                with torch.no_grad():
-                    obss_noise = torch.randn(obss.shape, device=obss.device)
-                    noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
-                    next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
-                    next_target = self.diffusion_model_old(
-                        x=next_noised_obss, obs=next_obss, 
-                        step=map_i(diff_steps),
-                        actions=next_actions).detach()
-
-                current_prediction = self.diffusion_model(
-                    x=noised_obss, obs=obss, 
-                    step=map_i(diff_steps),
-                    actions=actions)
-                next_prediction = self.diffusion_model(
-                    x=next_noised_obss, obs=obss, 
-                    step=map_i(diff_steps),
-                    actions=actions)
-
-                diffusion_loss = (
-                    (1-self._gamma)*(current_prediction - next_obss)**2 + 
-                    (self._gamma  )*(next_prediction - next_target)**2
-                ).mean()
-                diffusion_list.append(diffusion_loss)
-            diffusion_loss = torch.stack(diffusion_list).mean()
+        diffusion_loss = (
+            (1-self._gamma)*(current_prediction - next_obss)**2 + 
+            (self._gamma  )*(next_prediction - next_target)**2
+        ).mean()
 
 
         self.diffusion_model_optim.zero_grad()
         diffusion_loss.backward()
         self.diffusion_model_optim.step()
+
+
+
+        data_prediction = self.data_diffusion_model(
+            x=noised_obss, step=map_i(diff_steps)
+        )
+        data_diffusion_loss = ((data_prediction - obss)**2).mean()
+        self.data_diffusion_model_optim.zero_grad()
+        data_diffusion_loss.backward()
+        self.data_diffusion_model_optim.step()
 
 
         
@@ -369,56 +328,26 @@ class SOMRegularizedSACPolicy(TD3Policy):
             sigma = dist.scale
             q = self.critic1(obss, tanh_a)
 
-            if meta_batch_sampling:
-                noised_obss_list = []
-                shuffled_obss_list = []
-                diff_steps_list = []
-                action_list = []
-                n_iters = self.num_diffusion_iters
-                for _ in range(n_iters):
-                    diff_steps = torch.randint(0, 
-                        self.num_diffusion_iters, 
-                        (batch_size, 1)
-                    ).long().to(obss.device)
-                    atanh_a_new = dist.rsample()[1]
-                    tanh_a_new = torch.tanh(atanh_a_new)
-                    shuffled_indices = torch.randperm(obss.shape[0])
-                    shuffled_obss = obss[shuffled_indices]
-                    obss_noise = torch.randn(obss.shape, device=obss.device)
-
-                    shuffled_obss_list.append(shuffled_obss)
-                    noised_obss_list.append(self.add_noise(shuffled_obss, obss_noise, diff_steps))
-                    diff_steps_list.append(diff_steps)
-                    action_list.append(tanh_a_new)
-
-                shuffled_obss_tens = torch.cat(shuffled_obss_list, 0)
-                noised_obss_tens = torch.cat(noised_obss_list, 0)
-                diff_steps_tens = torch.cat(diff_steps_list, 0)
-                action_tens = torch.cat(action_list, 0)
-
+            rkl_list = []
+            for _ in range(self.num_diffusion_iters):
+                atanh_a_new = dist.rsample()[1]
+                tanh_a_new = torch.tanh(atanh_a_new)
+                shuffled_indices = torch.randperm(obss.shape[0])
+                shuffled_obss = obss[shuffled_indices]
+                obss_noise = torch.randn(obss.shape, device=obss.device)
+                noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
                 shuffled_obs_prediction = self.diffusion_model(
-                    x=noised_obss_tens, obs=shuffled_obss_tens, 
-                    step=map_i(diff_steps_tens),
-                    actions=action_tens
+                    x=noised_shuffled_obss, obs=obss, 
+                    step=map_i(diff_steps),
+                    actions=tanh_a_new
                 )
-                rkl_tens = ((shuffled_obs_prediction - shuffled_obss_tens)**2).mean()
+                rkl_list.append((shuffled_obs_prediction - shuffled_obss)**2)
 
-            else:
-                rkl_list = []
-                for _ in range(self.num_diffusion_iters):
-                    atanh_a_new = dist.rsample()[1]
-                    tanh_a_new = torch.tanh(atanh_a_new)
-                    shuffled_indices = torch.randperm(obss.shape[0])
-                    shuffled_obss = obss[shuffled_indices]
-                    obss_noise = torch.randn(obss.shape, device=obss.device)
-                    noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
-                    shuffled_obs_prediction = self.diffusion_model(
-                        x=noised_shuffled_obss, obs=obss, 
-                        step=map_i(diff_steps),
-                        actions=tanh_a_new
-                    )
-                    rkl_list.append((shuffled_obs_prediction - shuffled_obss)**2)
-                rkl_tens = torch.stack(rkl_list).mean()
+                # shuffled_obs_data_prediction = self.data_diffusion_model_old(
+                #     x = noised_shuffled_obss, step=map_i(diff_steps),
+                # )
+                # rkl_list.append((shuffled_obs_prediction - shuffled_obs_data_prediction)**2)
+            rkl_tens = torch.stack(rkl_list).mean()
 
 
             lmbda = 1 / q.abs().mean().detach()
@@ -439,13 +368,142 @@ class SOMRegularizedSACPolicy(TD3Policy):
             self._last_actor_loss = actor_loss.item()            
             self._last_q_mean = q.mean().item()
             self._sync_weight()
-        
-        self._cnt += 1
+                
 
-        return {
-            "mean_q": self._last_q_mean,
+
+
+        def estimate_rkl_grad():
+            dist = self.actor(obss)
+            atanh_a = dist.rsample()[1]
+            tanh_a = torch.tanh(atanh_a)
+
+            diff_steps = torch.randint(0, 
+                self.num_diffusion_iters, 
+                (batch_size, 1)
+            ).long().to(obss.device)
+            shuffled_indices = torch.randperm(obss.shape[0])
+            shuffled_obss = obss[shuffled_indices]
+            obss_noise = torch.randn(obss.shape, device=obss.device)
+            noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
+            shuffled_obs_prediction = self.diffusion_model(
+                x=noised_shuffled_obss, obs=obss, 
+                step=map_i(diff_steps),
+                actions=tanh_a
+            )
+            atanh_a.retain_grad()
+            loss = ((shuffled_obs_prediction - shuffled_obss)**2).mean()
+
+            self.actor_optim.zero_grad()
+            loss.backward()
+            grad = torch.clone(atanh_a.grad)
+            self.actor_optim.zero_grad()
+            return grad
+
+        def estimate_diffusion_rkl_grad():
+            dist = self.actor(obss)
+            atanh_a = dist.rsample()[1]
+            tanh_a = torch.tanh(atanh_a)
+
+            diff_steps = torch.randint(0, 
+                self.num_diffusion_iters, 
+                (batch_size, 1)
+            ).long().to(obss.device)
+            shuffled_indices = torch.randperm(obss.shape[0])
+            shuffled_obss = obss[shuffled_indices]
+            obss_noise = torch.randn(obss.shape, device=obss.device)
+            noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
+            shuffled_obs_prediction = self.diffusion_model(
+                x=noised_shuffled_obss, obs=obss, 
+                step=map_i(diff_steps),
+                actions=tanh_a
+            )
+            atanh_a.retain_grad()
+
+            shuffled_obs_data_prediction = self.data_diffusion_model_old(
+                x = noised_shuffled_obss, step=map_i(diff_steps),
+            )
+            # rkl_list.append((shuffled_obs_prediction - shuffled_obss)**2)
+            rkl_list.append((shuffled_obs_prediction - shuffled_obs_data_prediction)**2)
+            loss = ((shuffled_obs_prediction - shuffled_obs_data_prediction)**2).mean()
+
+            self.actor_optim.zero_grad()
+            loss.backward()
+            grad = torch.clone(atanh_a.grad)
+            self.actor_optim.zero_grad()
+            return grad
+
+
+        def estimate_rkl_weight_grad():
+            dist = self.actor(obss)
+            atanh_a = dist.rsample()[1]
+            tanh_a = torch.tanh(atanh_a)
+
+            diff_steps = torch.randint(0, 
+                self.num_diffusion_iters, 
+                (batch_size, 1)
+            ).long().to(obss.device)
+            shuffled_indices = torch.randperm(obss.shape[0])
+            shuffled_obss = obss[shuffled_indices]
+            obss_noise = torch.randn(obss.shape, device=obss.device)
+            noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
+            shuffled_obs_prediction = self.diffusion_model(
+                x=noised_shuffled_obss, obs=obss, 
+                step=map_i(diff_steps),
+                actions=tanh_a
+            )
+            loss = ((shuffled_obs_prediction - shuffled_obss)**2).mean()
+
+            self.actor_optim.zero_grad()
+            loss.backward()
+            grad_list = []
+            for p in self.actor.parameters():
+                grad_list.append(p.grad.reshape(-1))
+            grad = torch.cat(grad_list).unsqueeze(0)
+            self.actor_optim.zero_grad()
+            return grad
+
+
+        def estimate_covariance(fn1, fn2=None, label=""):
+            rkl_list_1 = []
+            rkl_list_2 = []
+            if fn2 == None: 
+                fn2 = fn1
+            for _ in range(self.num_diffusion_iters):
+                rkl_list_1.append(fn1())
+                rkl_list_2.append(fn2())
+
+            rkl_tensor_1 = torch.stack(rkl_list_1, -1)
+            rkl_tensor_2 = torch.stack(rkl_list_2, -1)
+
+            assert len(rkl_tensor_1.shape) == 3
+            assert rkl_tensor_1.shape[0] in [1, obss.shape[0]]
+            assert rkl_tensor_1.shape[2] == self.num_diffusion_iters
+
+            cos = torch.nn.functional.cosine_similarity
+            cos_sim_torch = cos(rkl_tensor_1, rkl_tensor_2, dim=-2).mean()
+            cos_sim_means_torch = cos(rkl_tensor_1.mean(-1), rkl_tensor_2.mean(-1), dim=-1).mean(0)
+
+            return {
+                f"metric/{label}_cos": cos_sim_torch.item(), 
+                f"metric/{label}_m_cos": cos_sim_means_torch.item()
+            }
+
+        if self._cnt%250==0: 
+            self._results_dict = {}
+            self._results_dict.update(estimate_covariance(estimate_rkl_grad, label="a"))
+            self._results_dict.update(estimate_covariance(estimate_diffusion_rkl_grad, label="diff_a"))
+            self._results_dict.update(estimate_covariance(estimate_rkl_grad, fn2=estimate_diffusion_rkl_grad, 
+                label="diff_cov"))
+            # self._results_dict.update(estimate_covariance(estimate_rkl_weight_grad, "rkl_w"))
+            # self._results_dict.update(estimate_variance(estimate_full_weight_grad, "full_w"))
+
+        self._cnt += 1
+        return_dict = {
             "loss/actor": self._last_actor_loss,
             "loss/critic1": critic1_loss.item(),
             "loss/critic2": critic2_loss.item(),
-            "loss/diffusion": diffusion_loss.item()
-        } 
+            "loss/diffusion": diffusion_loss.item(),
+            "loss/uncond_diffusion": data_diffusion_loss.item()
+        }
+        return_dict.update(self._results_dict)
+        return return_dict

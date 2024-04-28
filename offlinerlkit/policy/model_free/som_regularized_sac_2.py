@@ -15,7 +15,7 @@ from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.scaler import StandardScaler
 
 
-class SOMRegularizedSACPolicy(TD3Policy):
+class SOMRegularizedSAC2Policy(TD3Policy):
     """
     TD3+BC <Ref: https://arxiv.org/abs/2106.06860>
     """
@@ -238,16 +238,32 @@ class SOMRegularizedSACPolicy(TD3Policy):
     def learn(self, batch: Dict) -> Dict[str, float]:
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]
+        valid_next_actions = batch["valid_next_actions"]
 
         map_i = lambda t: -1 + 2*t/self.num_diffusion_iters
         
         # update critic
         q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
         with torch.no_grad():
-            next_actions = self.actor_old(next_obss).rsample()[0]
+            batch_next_actions = batch["next_actions"]
+            dist = self.actor_old(next_obss)
+            atanh_next_actions = dist.rsample()[1]
+            next_actions = torch.tanh(atanh_next_actions)
+            bound = 0.999
+            batch_atanh_actions = torch.atanh(
+                torch.clamp(batch_next_actions, 
+                min=-self._max_action*bound, max=self._max_action*bound)
+            )
+            kl = (((atanh_a - batch_atanh_actions).pow(2)*sigma**(-2)).mean() + 2*torch.log(sigma).mean())
+            log_p = dist.log_prob(next_actions)
             # next_actions = self.actor_old(next_obss).mode()[0]
             next_q = torch.min(self.critic1_old(next_obss, next_actions), self.critic2_old(next_obss, next_actions))
-            target_q = rewards + self._gamma * (1 - terminals) * next_q
+            # log_prob = dist.log_prob(next_actions, batch_next_actions)
+            bc_penalty = (
+                self.action_reg_weight*(kl + log_p)
+            )
+
+            target_q = rewards + self._gamma * (1 - terminals) * ( next_q - bc_penalty )
 
 
             batch_size = rewards.shape[0]

@@ -12,6 +12,7 @@ from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger
 from offlinerlkit.policy import BasePolicy
 
+from ray import train
 
 # model-free policy trainer
 class MFPolicyTrainer:
@@ -25,7 +26,8 @@ class MFPolicyTrainer:
         step_per_epoch: int = 1000,
         batch_size: int = 256,
         eval_episodes: int = 10,
-        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
+        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+        report: bool = False
     ) -> None:
         self.policy = policy
         self.eval_env = eval_env
@@ -37,6 +39,7 @@ class MFPolicyTrainer:
         self._batch_size = batch_size
         self._eval_episodes = eval_episodes
         self.lr_scheduler = lr_scheduler
+        self.report = report
 
     def train(self) -> Dict[str, float]:
         start_time = time.time()
@@ -48,16 +51,27 @@ class MFPolicyTrainer:
 
             self.policy.train()
 
-            pbar = tqdm(range(self._step_per_epoch), desc=f"Epoch #{e}/{self._epoch}")
-            for it in pbar:
-                batch = self.buffer.sample(self._batch_size)
-                loss = self.policy.learn(batch)
-                pbar.set_postfix(**loss)
+            if self.report: 
+                # pbar = tqdm(range(self._step_per_epoch), desc=f"Epoch #{e}/{self._epoch}")
+                pbar = range(self._step_per_epoch)
+                for it in pbar:
+                    batch = self.buffer.sample(self._batch_size)
+                    loss = self.policy.learn(batch)
+                    for k, v in loss.items():
+                        self.logger.logkv_mean(k, v) 
+                # pbar.set_postfix(**loss)                   
 
-                for k, v in loss.items():
-                    self.logger.logkv_mean(k, v)
-                
-                num_timesteps += 1
+            else: 
+                pbar = tqdm(range(self._step_per_epoch), desc=f"Epoch #{e}/{self._epoch}")
+                for it in pbar:
+                    batch = self.buffer.sample(self._batch_size)
+                    loss = self.policy.learn(batch)
+                    pbar.set_postfix(**loss)
+
+                    for k, v in loss.items():
+                        self.logger.logkv_mean(k, v)
+                    
+                    num_timesteps += 1
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
@@ -78,6 +92,10 @@ class MFPolicyTrainer:
         
             # save checkpoint
             torch.save(self.policy.state_dict(), os.path.join(self.logger.checkpoint_dir, "policy.pth"))
+
+            # if self.report:
+                # train.report({"reward": ep_reward_mean})
+                # train.report({"reward": norm_ep_rew_mean})
 
         self.logger.log("total time: {:.2f}s".format(time.time() - start_time))
         torch.save(self.policy.state_dict(), os.path.join(self.logger.model_dir, "policy.pth"))

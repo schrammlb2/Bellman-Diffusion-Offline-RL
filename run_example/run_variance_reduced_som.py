@@ -9,14 +9,15 @@ import torch
 
 
 from offlinerlkit.nets import MLP
-from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
+from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian
+from offlinerlkit.modules import DiffusionModel, UnconditionalDiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SOMRegOnlyPolicy
+from offlinerlkit.policy import VarianceReducedSOMPolicy
 
 
 """
@@ -30,6 +31,7 @@ def get_args():
     parser.add_argument("--algo-name", type=str, default="som_reg_only")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -80,12 +82,20 @@ def train(args=get_args()):
     env.seed(args.seed)
 
     # create policy model
-    # h=256
-    h=1024
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    single_eval_hidden_dims = args.hidden_dims
+    single_eval_hidden_dims = [256, 256, 256]
+    # single_eval_hidden_dims = [512, 512, 512]
+    backbone = MLP
+    actor_backbone = backbone(input_dim=np.prod(args.obs_shape), 
+        hidden_dims=single_eval_hidden_dims)
+    critic1_backbone = backbone(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    critic2_backbone = backbone(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    diffusion_backbone = backbone(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, 
+        hidden_dims=args.hidden_dims)
+    data_diffusion_backbone = backbone(input_dim=np.prod(args.obs_shape) + 1, 
+        hidden_dims=args.hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -98,25 +108,29 @@ def train(args=get_args()):
     critic1 = Critic(critic1_backbone, args.device)
     critic2 = Critic(critic2_backbone, args.device)
     diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args.obs_shape), device=args.device)
+    data_diffusion_model = UnconditionalDiffusionModel(data_diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
     diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr)
+    data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=args.critic_lr)
 
 
     # scaler for normalizing observations
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SOMRegOnlyPolicy(
+    policy = VarianceReducedSOMPolicy(
         actor,
         critic1,
         critic2,
         diffusion_model,
+        data_diffusion_model,
         actor_optim,
         critic1_optim,
         critic2_optim,
         diffusion_optim,
+        data_diffusion_optim,
         tau=args.tau,
         gamma=args.gamma,
         max_action=args.max_action,

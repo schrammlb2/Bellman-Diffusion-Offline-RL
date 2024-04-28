@@ -112,4 +112,6 @@ class TanhDiagGaussian(DiagGaussian):
             shape = [1] * len(mu.shape)
             shape[1] = -1
             sigma = (self.sigma_param.view(shape) + torch.zeros_like(mu)).exp()
+
+        # sigma = 0.2
         return TanhNormalWrapper(mu, sigma, self._max)

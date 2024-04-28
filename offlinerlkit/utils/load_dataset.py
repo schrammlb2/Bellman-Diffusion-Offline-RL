@@ -35,6 +35,8 @@ def qlearning_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
     obs_ = []
     next_obs_ = []
     action_ = []
+    next_action_ = []
+    valid_next_action_ = []
     reward_ = []
     done_ = []
 
@@ -47,10 +49,17 @@ def qlearning_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
     episode_step = 0
     for i in range(N-1):
         obs = dataset['observations'][i].astype(np.float32)
+        eps = 0.001
         if has_next_obs:
             new_obs = dataset['next_observations'][i].astype(np.float32)
+            valid_new_action = 1.*(
+                ((new_obs - dataset['observations'][i+1].astype(np.float32))**2).sum() < eps
+            )
+            new_action = dataset['actions'][i+1].astype(np.float32)
         else:
+            valid_new_action = True
             new_obs = dataset['observations'][i+1].astype(np.float32)
+            new_action = dataset['actions'][i+1].astype(np.float32)
         action = dataset['actions'][i].astype(np.float32)
         reward = dataset['rewards'][i].astype(np.float32)
         done_bool = bool(dataset['terminals'][i])
@@ -71,6 +80,8 @@ def qlearning_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
         obs_.append(obs)
         next_obs_.append(new_obs)
         action_.append(action)
+        next_action_.append(new_action)
+        valid_next_action_.append(valid_new_action)
         reward_.append(reward)
         done_.append(done_bool)
         episode_step += 1
@@ -79,6 +90,8 @@ def qlearning_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
         'observations': np.array(obs_),
         'actions': np.array(action_),
         'next_observations': np.array(next_obs_),
+        'next_actions': np.array(next_action_),
+        'valid_next_actions': np.array(valid_next_action_),
         'rewards': np.array(reward_),
         'terminals': np.array(done_),
     }

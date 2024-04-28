@@ -92,6 +92,7 @@ class SACBCPolicy(TD3Policy):
     def learn(self, batch: Dict) -> Dict[str, float]:
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]
+
         
         # update critic
         q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
@@ -117,6 +118,31 @@ class SACBCPolicy(TD3Policy):
         critic1_loss = ((q1 - target_q).pow(2)).mean()
         critic2_loss = ((q2 - target_q).pow(2)).mean()
 
+
+        dist = self.actor(obss)
+        bound = 0.999
+        atanh_actions = torch.atanh(
+            torch.clamp(actions, 
+            min=-self._max_action*bound, max=self._max_action*bound)
+        )
+        a = dist.mode()[1].detach()
+        # a = actions
+        tanh_a = torch.tanh(a)
+        sigma = dist.scale
+        kl = (
+            ((a - atanh_actions).pow(2)*sigma**(-2)).mean() + 
+            2*torch.log(sigma).mean() - torch.log(torch.tensor(2*torch.pi))
+        )*self._policy_noise**2
+        # q1_prev, q2_prev = self.critic1(obss, a), self.critic2(obss, a)
+        # critic1_loss += (1/self._alpha*kl.detach()*q1_prev).mean()
+        # critic2_loss += (1/self._alpha*kl.detach()*q2_prev).mean()
+        critic1_loss += (1/self._alpha*kl.detach()*q1).mean()
+        critic2_loss += (1/self._alpha*kl.detach()*q2).mean()
+            # critic1_loss += (1/self._alpha*kl.detach()*q1_prev).mean()
+            # critic2_loss += (1/self._alpha*kl.detach()*q2_prev).mean()
+
+
+
         self.critic1_optim.zero_grad()
         critic1_loss.backward()
         self.critic1_optim.step()
@@ -127,6 +153,7 @@ class SACBCPolicy(TD3Policy):
 
         # update actor
         if self._cnt % self._freq == 0:
+
             # a = self.actor(obss).mode()[1]
             dist = self.actor(obss)
             # a = dist.mode()[0]
@@ -137,34 +164,13 @@ class SACBCPolicy(TD3Policy):
             lmbda = self._alpha / q.abs().mean().detach()
             # log_pol_noise = torch.log(self._policy_noise)
             c = self._policy_noise
-            # actor_loss = -lmbda * q.mean() + (
-            #     1/2*(torch.exp(-2*log_probs)*((a - actions).pow(2) + c**2)).mean() + log_probs.mean()
-            # )
-            # actor_loss = -lmbda * q.mean() + (
-            #     1/2*(torch.exp(-2*log_probs)*((a - actions).pow(2))).mean() + log_probs.mean()
-            # )
-            # actor_loss = -lmbda * q.mean() + (torch.exp(-log_probs.detach()+0.00001)/c*(a - actions).pow(2)).mean() + (
-            #     # 1/2*(torch.exp(-2*log_probs)*(c**2)).mean() + log_probs.mean()                
-            #     ((torch.exp(log_probs+0.00001) - c)**2).mean()
-            # )
-            # actor_loss = -lmbda * q.mean() + ((a - actions).pow(2)).mean() + .001*(
-            #     log_probs.mean()
-            #     # 1/2*(torch.exp(-2*log_probs)*(c**2)).mean() + log_probs.mean()                
-            #     # ((torch.exp(log_probs+0.00001) - c)**2).mean()
-            # )
-            # actor_loss = -lmbda * q.mean() + ((a - actions).pow(2)).mean() + .001*(
-            #     1/2*c**2*(sigma**(-2)).mean() + torch.log(sigma).mean()
-            #     # ((sigma - c)**2).mean()
-            #     # 1/2*(torch.exp(-2*log_probs)*(c**2)).mean() + log_probs.mean()                
-            #     # ((torch.exp(log_probs+0.00001) - c)**2).mean()
-            # )
-            # actor_loss = -lmbda * q.mean() + ((a - actions).pow(2)*sigma**(-2)).mean() + 2*torch.log(sigma).mean()
-            bound = 0.99
+            bound = 0.999
             atanh_actions = torch.atanh(
                 torch.clamp(actions, 
                 min=-self._max_action*bound, max=self._max_action*bound)
             )
-            actor_loss = -lmbda * q.mean() + ((a - atanh_actions).pow(2)*sigma**(-2)).mean() + 2*torch.log(sigma).mean()
+            kl = ((a - atanh_actions).pow(2)*sigma**(-2)).mean() + 2*torch.log(sigma).mean()
+            actor_loss = -lmbda * q.mean() + kl*self._policy_noise**2
             # actor_loss = -lmbda * q.mean() + log_probs.mean()  
 
             self.actor_optim.zero_grad()

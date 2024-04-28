@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, VecNormMLP, NormedMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
@@ -27,7 +27,7 @@ alpha=2.5 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="som_reg_only")
+    parser.add_argument("--algo-name", type=str, default="tweaked_som_reg_only")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--actor-lr", type=float, default=3e-4)
@@ -81,11 +81,16 @@ def train(args=get_args()):
 
     # create policy model
     # h=256
+    critic_architecture = VecNormMLP
+    # critic_architecture = NormedMLP
     h=1024
     actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    critic1_backbone = critic_architecture(
+        input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
+    critic2_backbone = critic_architecture(
+        input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
+    diffusion_backbone = critic_architecture(
+        input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,

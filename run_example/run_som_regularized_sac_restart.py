@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
@@ -16,7 +16,7 @@ from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SOMRegOnlyPolicy
+from offlinerlkit.policy import SOMRegularizedSACRestartPolicy
 
 
 """
@@ -27,9 +27,11 @@ alpha=2.5 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="som_reg_only")
+    parser.add_argument("--algo-name", type=str, default="som_regularized_sac_original")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    # parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256, 256])
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[512, 512])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -43,7 +45,7 @@ def get_args():
     parser.add_argument("--epoch", type=int, default=1000)
     parser.add_argument("--step-per-epoch", type=int, default=1000)
     parser.add_argument("--eval_episodes", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
 
     return parser.parse_args()
@@ -82,10 +84,20 @@ def train(args=get_args()):
     # create policy model
     # h=256
     h=1024
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    single_eval_hidden_dims = args.hidden_dims
+    # single_eval_hidden_dims = [512, 512]
+    # single_eval_hidden_dims = [512, 512, 512]
+    diffusion_hidden_dims = args.hidden_dims
+    # diffusion_hidden_dims = [512, 512]
+    # backbone = MLP
+    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), 
+        hidden_dims=single_eval_hidden_dims)
+    critic1_backbone = NormedMLP(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    critic2_backbone = NormedMLP(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    diffusion_backbone = NormedMLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, 
+        hidden_dims=diffusion_hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -108,7 +120,7 @@ def train(args=get_args()):
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SOMRegOnlyPolicy(
+    policy = SOMRegularizedSACRestartPolicy(
         actor,
         critic1,
         critic2,

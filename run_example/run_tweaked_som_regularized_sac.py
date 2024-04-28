@@ -8,15 +8,18 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+# from offlinerlkit.nets import MLP
+# from offlinerlkit.nets import MLP, MPMLP
+from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.utils.scaler import StandardScaler
-from offlinerlkit.buffer import ReplayBuffer
+# from offlinerlkit.buffer import ReplayBuffer
+from offlinerlkit.buffer import NextActionBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SOMRegOnlyPolicy
+from offlinerlkit.policy import SOMRegularizedSAC2Policy
 
 
 """
@@ -27,23 +30,33 @@ alpha=2.5 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="som_reg_only")
+    parser.add_argument("--algo-name", type=str, default="tweaked_som_regularized_sac")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[512, 512, 256])
+    # parser.add_argument("--hidden-dims", type=int, nargs='*', default=[512, 512])
+    # parser.add_argument("--hidden-dims", type=int, nargs='*', default=[1024, 1024])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
+    parser.add_argument("--diffusion-lr", type=float, default=1e-4)
+    # parser.add_argument("--actor-lr", type=float, default=0.001)
+    # parser.add_argument("--critic-lr", type=float, default=0.001)
+    # parser.add_argument("--diffusion-lr", type=float, default=0.001)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--exploration-noise", type=float, default=0.1)
     parser.add_argument("--policy-noise", type=float, default=0.2)
     parser.add_argument("--noise-clip", type=float, default=0.5)
     parser.add_argument("--update-actor-freq", type=int, default=2)
-    parser.add_argument("--alpha", type=float, default=2.5)
-    parser.add_argument("--num_diffusion_iters", type=int, default=10)
+    # parser.add_argument("--alpha", type=float, default=2.5)
+    parser.add_argument("--action-reg-weight", type=float, default=0.1)
+    parser.add_argument("--state-reg-weight", type=float, default=5.)
+    parser.add_argument("--num-diffusion-iters", type=int, default=10)
     parser.add_argument("--epoch", type=int, default=1000)
     parser.add_argument("--step-per-epoch", type=int, default=1000)
     parser.add_argument("--eval_episodes", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=256)
+    # parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
 
     return parser.parse_args()
@@ -60,7 +73,7 @@ def train(args=get_args()):
     args.max_action = env.action_space.high[0]
 
     # create buffer
-    buffer = ReplayBuffer(
+    buffer = NextActionBuffer(
         buffer_size=len(dataset["observations"]),
         obs_shape=args.obs_shape,
         obs_dtype=np.float32,
@@ -79,13 +92,28 @@ def train(args=get_args()):
     torch.backends.cudnn.deterministic = True
     env.seed(args.seed)
 
+    base_batch_size = 256
+    lr_scale = np.sqrt(args.batch_size/base_batch_size)
+    args.actor_lr *= lr_scale
+    args.critic_lr *= lr_scale
+
     # create policy model
     # h=256
-    h=1024
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[h, h])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[h, h])
-    diffusion_backbone = MLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, hidden_dims=[h, h])
+    # # h=512
+    single_eval_hidden_dims = args.hidden_dims
+    # single_eval_hidden_dims = [512, 512]
+    # single_eval_hidden_dims = [512, 512, 512]
+    diffusion_hidden_dims = args.hidden_dims
+    # diffusion_hidden_dims = [512, 512]
+    # backbone = MLP
+    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), 
+        hidden_dims=single_eval_hidden_dims)
+    critic1_backbone = NormedMLP(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    critic2_backbone = NormedMLP(input_dim=np.prod(args.obs_shape)+args.action_dim, 
+        hidden_dims=single_eval_hidden_dims)
+    diffusion_backbone = NormedMLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, 
+        hidden_dims=diffusion_hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -108,7 +136,7 @@ def train(args=get_args()):
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SOMRegOnlyPolicy(
+    policy = SOMRegularizedSAC2Policy(
         actor,
         critic1,
         critic2,
@@ -124,7 +152,8 @@ def train(args=get_args()):
         policy_noise=args.policy_noise,
         noise_clip=args.noise_clip,
         update_actor_freq=args.update_actor_freq,
-        alpha=args.alpha,
+        action_reg_weight=args.action_reg_weight,
+        state_reg_weight=args.state_reg_weight,
         num_diffusion_iters=args.num_diffusion_iters,
         scaler=scaler
     )
