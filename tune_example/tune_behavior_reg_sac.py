@@ -10,12 +10,12 @@ import ray
 from ray import tune
 
 
-from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian, DiffusionModel
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.utils.scaler import StandardScaler
-from offlinerlkit.buffer import ReplayBuffer
+from offlinerlkit.buffer import ReplayBuffer, NextActionBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
 from offlinerlkit.policy import SOMRegularizedSACPolicy
@@ -34,8 +34,8 @@ alpha=2.5 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="renyi")
-    parser.add_argument("--task", type=str, default="walker2d-medium-replay-v2")
+    parser.add_argument("--algo-name", type=str, default="behavior_reg_sac")
+    parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--hidden-dims", type=int, nargs='*', default=[512, 512])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
@@ -59,7 +59,7 @@ def get_args():
 
     return parser.parse_args()
 
-
+# @ray.remote(memory=1000 * 1024 * 1024)
 def trainable(config):
     import d4rl
     # set config
@@ -79,7 +79,7 @@ def trainable(config):
     args_for_exp.max_action = env.action_space.high[0]
 
     # create buffer
-    buffer = ReplayBuffer(
+    buffer = NextActionBuffer(
         buffer_size=len(dataset["observations"]),
         obs_shape=args_for_exp.obs_shape,
         obs_dtype=np.float32,
@@ -102,9 +102,10 @@ def trainable(config):
     # h=256
     # h=512
     actor_backbone = MLP(input_dim=np.prod(args_for_exp.obs_shape), hidden_dims=args_for_exp.hidden_dims)
-    critic1_backbone = MLP(input_dim=np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim, hidden_dims=args_for_exp.hidden_dims)
-    critic2_backbone = MLP(input_dim=np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim, hidden_dims=args_for_exp.hidden_dims)
-    diffusion_backbone = MLP(input_dim=2*np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim + 1, hidden_dims=args_for_exp.hidden_dims)
+    critic1_backbone = NormedMLP(input_dim=np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim, hidden_dims=args_for_exp.hidden_dims)
+    critic2_backbone = NormedMLP(input_dim=np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim, hidden_dims=args_for_exp.hidden_dims)
+    diffusion_backbone = NormedMLP(input_dim=2*np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim + 1, hidden_dims=args_for_exp.hidden_dims)
+    bc_diffusion_backbone = NormedMLP(input_dim=2*np.prod(args_for_exp.obs_shape)+args_for_exp.action_dim + 1, hidden_dims=args_for_exp.hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args_for_exp.action_dim,
@@ -117,25 +118,29 @@ def trainable(config):
     critic1 = Critic(critic1_backbone, args_for_exp.device)
     critic2 = Critic(critic2_backbone, args_for_exp.device)
     diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args_for_exp.obs_shape), device=args_for_exp.device)
+    bc_diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args_for_exp.obs_shape), device=args_for_exp.device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args_for_exp.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args_for_exp.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args_for_exp.critic_lr)
     diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args_for_exp.critic_lr)
+    bc_diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args_for_exp.critic_lr)
 
 
     # scaler for normalizing observations
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = RenyiRegSACPolicy(
+    policy = BehaviorRegSACPolicy(
         actor,
         critic1,
         critic2,
         diffusion_model,
+        bc_diffusion_model,
         actor_optim,
         critic1_optim,
         critic2_optim,
         diffusion_optim,
+        bc_diffusion_optim,
         tau=args_for_exp.tau,
         gamma=args_for_exp.gamma,
         max_action=args_for_exp.max_action,
@@ -185,14 +190,15 @@ if __name__ == "__main__":
     from ray.tune.search import ConcurrencyLimiter
     from ray.tune.search.optuna import OptunaSearch
     import os
+    # ray.init(memory=8000 * 1024 * 1024)
     ray.init()
 
     args = get_args()
 
     config = {
         "action_reg_weight": tune.qloguniform(0.001, 1, 0.001),
-        "state_reg_weight": tune.qloguniform(0.01, 50, 0.01),
-        "num_diffusion_iters": tune.lograndint(3, 100),
+        "state_reg_weight": tune.qloguniform(0.1, 100, 0.1),
+        # "num_diffusion_iters": tune.lograndint(3, 100),
     }
 
     algo = OptunaSearch()

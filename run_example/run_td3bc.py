@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import Actor, Critic
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
@@ -30,6 +30,7 @@ def get_args():
     parser.add_argument("--algo-name", type=str, default="td3bc")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--hidden-dims", type=int, nargs='*', default=[512, 512])
     parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -42,7 +43,8 @@ def get_args():
     parser.add_argument("--epoch", type=int, default=1000)
     parser.add_argument("--step-per-epoch", type=int, default=1000)
     parser.add_argument("--eval_episodes", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=256)
+    # parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
 
     return parser.parse_args()
@@ -79,9 +81,9 @@ def train(args=get_args()):
     env.seed(args.seed)
 
     # create policy model
-    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=[256, 256])
-    critic1_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[256, 256])
-    critic2_backbone = MLP(input_dim=np.prod(args.obs_shape)+args.action_dim, hidden_dims=[256, 256])
+    actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=args.hidden_dims)
+    critic1_backbone = NormedMLP(input_dim=np.prod(args.obs_shape) + args.action_dim, hidden_dims=args.hidden_dims)
+    critic2_backbone = NormedMLP(input_dim=np.prod(args.obs_shape) + args.action_dim, hidden_dims=args.hidden_dims)
     actor = Actor(actor_backbone, args.action_dim, max_action=args.max_action, device=args.device)
 
     critic1 = Critic(critic1_backbone, args.device)

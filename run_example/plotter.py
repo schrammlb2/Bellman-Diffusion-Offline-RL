@@ -167,7 +167,9 @@ if __name__ == "__main__":
         # ["som_regularized_sac", "diffusion_only"]
         # ["som_regularized_sac", "state_reg_only", "cql"],
         # ["som_regularized_sac", "cql",]
-        ["som_regularized_sac", "iql"]
+        # ["som_regularized_sac", "iql"]
+        # ["behavior_reg_sac", "td3bc", "cql"]
+        ["behavior_reg_sac", "td3bc"]
     )
     parser.add_argument("--query-file", default="policy_training_progress.csv")
     parser.add_argument("--query-x", default="timestep")
@@ -206,5 +208,5 @@ if __name__ == "__main__":
     plt.savefig(output_path)
     # if args.output_path:
     #     plt.savefig(output_path)
-    # if args.show:
-    #     plt.show()
+    if args.show:
+        plt.show()

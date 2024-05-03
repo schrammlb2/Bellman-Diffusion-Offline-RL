@@ -19,6 +19,8 @@ from offlinerlkit.policy.model_free.som_regularized_sac_2 import SOMRegularizedS
 from offlinerlkit.policy.model_free.som_regularized_sac_original import SOMRegularizedSACOriginalPolicy
 from offlinerlkit.policy.model_free.som_regularized_sac_restart import SOMRegularizedSACRestartPolicy
 from offlinerlkit.policy.model_free.renyi_reg_sac import RenyiRegSACPolicy
+from offlinerlkit.policy.model_free.behavior_reg_sac import BehaviorRegSACPolicy
+from offlinerlkit.policy.model_free.kl_reg_sac import KLRegSACPolicy
 from offlinerlkit.policy.model_free.state_action_reg_sac import StateActionRegularizedSACPolicy
 from offlinerlkit.policy.model_free.bounded_variance_IS import BoundedVarianceISPolicy
 from offlinerlkit.policy.model_free.som_reg_only import SOMRegOnlyPolicy
@@ -51,6 +53,8 @@ __all__ = [
     "StateActionRegularizedSACPolicy",
     "StateActionRegularizedSAC2Policy",
     "RenyiRegSACPolicy",
+    "BehviorRegSACPolicy",
+    "KLRegSACPolicy",
     "SOMRegOnlyPolicy",
     "SOMDiagnosticPolicy",
     "VarianceReducedSOMPolicy"

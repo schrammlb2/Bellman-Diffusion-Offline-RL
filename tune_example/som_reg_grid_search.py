@@ -20,7 +20,6 @@ from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
 from offlinerlkit.policy import SOMRegularizedSACPolicy
 from offlinerlkit.policy import RenyiRegSACPolicy
-from offlinerlkit.policy import BehaviorRegSACPolicy
 
 
 
@@ -170,12 +169,13 @@ def trainable(config):
         step_per_epoch=args_for_exp.step_per_epoch,
         batch_size=args_for_exp.batch_size,
         eval_episodes=args_for_exp.eval_episodes, 
-        report=True
+        # report=True,
+        report=False,
     )
 
     # train
     result = policy_trainer.train()
-    # tune.report(**result)
+    tune.report(**result)
     return result
 
 
@@ -187,47 +187,56 @@ if __name__ == "__main__":
     import os
     ray.init()
 
-    args = get_args()
+    # args = get_args()
 
+    # config = {
+    #     "action_reg_weight": tune.qloguniform(0.001, 1, 0.001),
+    #     "state_reg_weight": tune.qloguniform(0.01, 50, 0.01),
+    #     "num_diffusion_iters": tune.lograndint(3, 100),
+    # }
+
+    # algo = OptunaSearch()
+    # # algo.restore_from_dir(
+    # #   os.path.join("~/my_results", "my-experiment-1")
+    # # )
+    # # algo = ConcurrencyLimiter(algo, max_concurrent=4)
+    # # algo = ConcurrencyLimiter(algo)
+    # num_samples = 100
+    # trainable_with_resources = tune.with_resources(trainable, {"gpu": 0.25})
+    # # args.device = "cpu"
+    # # trainable_with_resources = tune.with_resources(trainable, {"cpu": 1})
+    # algo = ConcurrencyLimiter(algo, max_concurrent=4)
+    # tuner = tune.Tuner(
+    #     trainable_with_resources,
+    #     tune_config=tune.TuneConfig(
+    #         metric="reward",
+    #         mode="max",
+    #         search_alg=algo,
+    #         num_samples=num_samples,
+    #     ),
+    #     run_config=ray.train.RunConfig(
+    #         name="my-experiment-1",
+    #         storage_path="~/my_results",
+    #     ),
+    #     param_space=config
+    # )
+    # results = tuner.fit()
+    # # trainable({})
+
+
+    args = get_args()
     config = {
-        "action_reg_weight": tune.qloguniform(0.001, 1, 0.001),
-        "state_reg_weight": tune.qloguniform(0.01, 50, 0.01),
-        "num_diffusion_iters": tune.lograndint(3, 100),
+        # "action_reg_weight": tune.grid_search([0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1]),
+        "action_reg_weight": tune.grid_search([0.001, 0.01, 0.1, 1]),
+        "state_reg_weight": tune.grid_search([0.01, 0.1, 1, 10]),
+        "f_divergence_exponent": tune.grid_search([0.1, 1, 10])
     }
 
-    algo = OptunaSearch()
-    # algo.restore_from_dir(
-    #   os.path.join("~/my_results", "my-experiment-1")
-    # )
-    # algo = ConcurrencyLimiter(algo, max_concurrent=4)
-    # algo = ConcurrencyLimiter(algo)
-    num_samples = 100
-    trainable_with_resources = tune.with_resources(trainable, {"gpu": 0.25})
-    # args.device = "cpu"
-    # trainable_with_resources = tune.with_resources(trainable, {"cpu": 1})
-    algo = ConcurrencyLimiter(algo, max_concurrent=4)
-    tuner = tune.Tuner(
-        trainable_with_resources,
-        tune_config=tune.TuneConfig(
-            metric="reward",
-            mode="max",
-            search_alg=algo,
-            num_samples=num_samples,
-        ),
-        run_config=ray.train.RunConfig(
-            name="my-experiment-1",
-            storage_path="~/my_results",
-        ),
-        param_space=config
+    analysis = tune.run(
+        trainable,
+        name="tune_renyi",
+        config=config,
+        resources_per_trial={
+            "gpu": 0.5
+        }
     )
-    results = tuner.fit()
-    # trainable({})
-
-    # analysis = tune.run(
-    #     trainable,
-    #     name="tune_mopo",
-    #     config=config,
-    #     resources_per_trial={
-    #         "gpu": 0.5
-    #     }
-    # )
