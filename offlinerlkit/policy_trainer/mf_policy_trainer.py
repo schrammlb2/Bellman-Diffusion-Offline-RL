@@ -59,6 +59,7 @@ class MFPolicyTrainer:
                     loss = self.policy.learn(batch)
                     for k, v in loss.items():
                         self.logger.logkv_mean(k, v) 
+                    num_timesteps += 1
                 # pbar.set_postfix(**loss)                   
 
             else: 
@@ -93,9 +94,9 @@ class MFPolicyTrainer:
             # save checkpoint
             torch.save(self.policy.state_dict(), os.path.join(self.logger.checkpoint_dir, "policy.pth"))
 
-            # if self.report:
+            if self.report:
                 # train.report({"reward": ep_reward_mean})
-                # train.report({"reward": norm_ep_rew_mean})
+                train.report({"reward": norm_ep_rew_mean})
 
         self.logger.log("total time: {:.2f}s".format(time.time() - start_time))
         torch.save(self.policy.state_dict(), os.path.join(self.logger.model_dir, "policy.pth"))

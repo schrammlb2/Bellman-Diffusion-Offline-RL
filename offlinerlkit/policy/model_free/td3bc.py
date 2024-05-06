@@ -87,7 +87,7 @@ class TD3BCPolicy(TD3Policy):
         # update critic
         q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
         with torch.no_grad():
-            noise = 0*(torch.randn_like(actions) * self._policy_noise).clamp(-self._noise_clip, self._noise_clip)
+            noise = (torch.randn_like(actions) * self._policy_noise).clamp(-self._noise_clip, self._noise_clip)
             next_actions = (self.actor_old(next_obss) + noise).clamp(-self._max_action, self._max_action)
             next_q = torch.min(self.critic1_old(next_obss, next_actions), self.critic2_old(next_obss, next_actions))
             target_q = rewards + self._gamma * (1 - terminals) * next_q

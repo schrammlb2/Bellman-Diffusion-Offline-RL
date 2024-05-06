@@ -14,28 +14,16 @@ do
 	# 	"ant-medium-v2" "ant-medium-expert-v2" "ant-expert-v2" "ant-full-replay-v2";
 	# for task in "hopper-medium-v2"  "walker2d-full-replay-v2" \
 	# 	"ant-medium-v2" "ant-medium-expert-v2" "ant-expert-v2" "ant-full-replay-v2";
-	for method in "run_example/run_td3bc.py" "run_example/run_cql.py";
+	for method in "run_example/run_test_kl_reg.py" "run_example/run_td3bc.py" "run_example/run_cql.py";
 	do
-		for task in "hopper-medium-v2" "halfcheetah-medium-v2"   "walker2d-medium-v2" \
-			 "hopper-medium-replay-v2" "halfcheetah-medium-replay-v2"   "walker2d-medium-replay-v2" \
-			 "hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2";
+		# for task in "hopper-medium-v2" "halfcheetah-medium-v2"   "walker2d-medium-v2" \
+		# 	 "hopper-medium-replay-v2" "halfcheetah-medium-replay-v2"   "walker2d-medium-replay-v2" \
+		# 	 "hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2";
+		for task in "hopper-medium-replay-v2" "halfcheetah-medium-replay-v2"   "walker2d-medium-replay-v2" 
 		do 
 			echo $task
-			settings="--task=$task --epoch=$epoch --seed=$i" # --hidden-dims 512 512 --batch-size=10000"
-			# python run_example/run_som_reg_only.py --task=$task --epoch=$epoch --seed=$i
-			# python run_example/run_som_regularized_sac.py $settings
-			# python run_example/run_tweaked_som_regularized_sac.py $settings
-			# python run_example/run_renyi_reg_sac.py $settings
-			# python run_example/run_behavior_reg_sac.py $settings
+			settings="--task=$task --epoch=$epoch --seed=$i"
 			python $method $settings
-
-			# python run_example/run_som_regularized_sac_original.py $settings
-			# python run_example/run_tweaked_som_reg_only.py $settings
-			# python run_example/run_rebrac.py $settings
-			# python run_example/run_state_action_reg.py --task=$task --epoch=$epoch --seed=$i
-			# python run_example/run_cql.py $settings
-			# # python run_example/run_edac.py --task=$task --epoch=$epoch --seed=$i
-			# python run_example/run_iql.py $settings
 		done
 	done
 done

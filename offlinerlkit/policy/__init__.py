@@ -21,6 +21,7 @@ from offlinerlkit.policy.model_free.som_regularized_sac_restart import SOMRegula
 from offlinerlkit.policy.model_free.renyi_reg_sac import RenyiRegSACPolicy
 from offlinerlkit.policy.model_free.behavior_reg_sac import BehaviorRegSACPolicy
 from offlinerlkit.policy.model_free.kl_reg_sac import KLRegSACPolicy
+from offlinerlkit.policy.model_free.test_kl_reg import TestKLRegPolicy
 from offlinerlkit.policy.model_free.state_action_reg_sac import StateActionRegularizedSACPolicy
 from offlinerlkit.policy.model_free.bounded_variance_IS import BoundedVarianceISPolicy
 from offlinerlkit.policy.model_free.som_reg_only import SOMRegOnlyPolicy
