@@ -107,8 +107,10 @@ def train(args=get_args()):
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
-    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr)
-    data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=args.critic_lr)
+
+    div = 10
+    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr/div)
+    data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=args.critic_lr/div)
 
 
     # scaler for normalizing observations

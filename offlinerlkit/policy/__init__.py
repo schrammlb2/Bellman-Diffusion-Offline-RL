@@ -6,6 +6,7 @@ from offlinerlkit.policy.model_free.sac import SACPolicy
 from offlinerlkit.policy.model_free.td3 import TD3Policy
 from offlinerlkit.policy.model_free.rebrac import ReBRACPolicy
 from offlinerlkit.policy.model_free.cql import CQLPolicy
+from offlinerlkit.policy.model_free.mf_combo import MFComboPolicy
 from offlinerlkit.policy.model_free.conservative_sac import ConservativeSACPolicy
 from offlinerlkit.policy.model_free.iql import IQLPolicy
 from offlinerlkit.policy.model_free.iql_diffusion import IQLDiffusionPolicy
@@ -15,12 +16,14 @@ from offlinerlkit.policy.model_free.sacbc import SACBCPolicy
 from offlinerlkit.policy.model_free.kl_bc import KLBCPolicy
 from offlinerlkit.policy.model_free.no_training import NoTrainingPolicy
 from offlinerlkit.policy.model_free.som_regularized_sac import SOMRegularizedSACPolicy
+from offlinerlkit.policy.model_free.som_regularized_sac_no_value import SOMRegularizedNoValuePolicy
 from offlinerlkit.policy.model_free.som_regularized_sac_2 import SOMRegularizedSAC2Policy
 from offlinerlkit.policy.model_free.som_regularized_sac_original import SOMRegularizedSACOriginalPolicy
 from offlinerlkit.policy.model_free.som_regularized_sac_restart import SOMRegularizedSACRestartPolicy
 from offlinerlkit.policy.model_free.renyi_reg_sac import RenyiRegSACPolicy
 from offlinerlkit.policy.model_free.behavior_reg_sac import BehaviorRegSACPolicy
 from offlinerlkit.policy.model_free.kl_reg_sac import KLRegSACPolicy
+from offlinerlkit.policy.model_free.diffusion_policy import DiffusionPolicy
 from offlinerlkit.policy.model_free.test_kl_reg import TestKLRegPolicy
 from offlinerlkit.policy.model_free.state_action_reg_sac import StateActionRegularizedSACPolicy
 from offlinerlkit.policy.model_free.bounded_variance_IS import BoundedVarianceISPolicy
@@ -44,6 +47,7 @@ __all__ = [
     "ConservativeSACPolicy",
     "TD3Policy",
     "CQLPolicy",
+    "MFComboPolicy",
     "IQLPolicy",
     "IQLDiffusionPolicy",
     "MCQPolicy",
@@ -51,11 +55,13 @@ __all__ = [
     "SACBCPolicy",
     "NoTrainingPolicy",
     "SOMRegularizedSACPolicy",
+    "SOMRegularizedNoValuePolicy",
     "StateActionRegularizedSACPolicy",
     "StateActionRegularizedSAC2Policy",
     "RenyiRegSACPolicy",
     "BehviorRegSACPolicy",
     "KLRegSACPolicy",
+    "DiffusionPolicy",
     "SOMRegOnlyPolicy",
     "SOMDiagnosticPolicy",
     "VarianceReducedSOMPolicy"

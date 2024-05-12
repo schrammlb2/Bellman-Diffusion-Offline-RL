@@ -26,3 +26,8 @@ class Critic(nn.Module):
         logits = self.backbone(obs)
         values = self.last(logits)
         return values
+
+
+    def norm_weights(self):
+        self.backbone.norm_weights()
+

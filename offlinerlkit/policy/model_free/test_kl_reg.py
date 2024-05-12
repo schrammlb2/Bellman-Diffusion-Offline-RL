@@ -77,7 +77,8 @@ class TestKLRegPolicy(TD3Policy):
         self.noise_scheduler = DDPMScheduler(
             num_train_timesteps=num_diffusion_iters,
             beta_schedule="squaredcos_cap_v2",
-            clip_sample=False,
+            # clip_sample=False,
+            clip_sample=True,
             # our network predicts noise (instead of denoised action)
             prediction_type="sample",
         )
@@ -369,6 +370,9 @@ class TestKLRegPolicy(TD3Policy):
             self._sync_weight()
         
         self._cnt += 1
+
+        self.diffusion_model.norm_weights()
+        self.data_diffusion_model.norm_weights()
 
         return {
             "mean_q": self._last_q_mean,

@@ -25,6 +25,9 @@ class ActorProb(nn.Module):
         dist = self.dist_net(logits)
         return dist
 
+    def norm_weights(self):
+        pass
+
 
 # for TD3
 class Actor(nn.Module):
@@ -49,3 +52,5 @@ class Actor(nn.Module):
         logits = self.backbone(obs)
         actions = self._max * torch.tanh(self.last(logits))
         return actions
+    def norm_weights(self):
+        pass

@@ -168,7 +168,8 @@ if __name__ == "__main__":
         # ["som_regularized_sac", "state_reg_only", "cql"],
         # ["som_regularized_sac", "cql",]
         # ["som_regularized_sac", "iql"]
-        ["behavior_reg_sac", "td3bc", "cql"]
+        # ["behavior_reg_sac", "td3bc", "cql"]
+        ["test_kl_reg", "td3bc", "cql"]
         # ["behavior_reg_sac", "td3bc"]
     )
     parser.add_argument("--query-file", default="policy_training_progress.csv")
@@ -204,7 +205,7 @@ if __name__ == "__main__":
         color_list=args.colors
     )
     task_name = "-".join(args.task.split("-")[:-1])
-    output_path = f"./{task_name}.png"
+    output_path = f"{args.root_dir}/{task_name}.png"
     plt.savefig(output_path)
     # if args.output_path:
     #     plt.savefig(output_path)

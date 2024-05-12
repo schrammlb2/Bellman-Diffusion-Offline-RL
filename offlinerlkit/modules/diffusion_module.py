@@ -37,6 +37,9 @@ class DiffusionModel(nn.Module):
         output = self.last(logits)
         return output
 
+    def norm_weights(self):
+        self.backbone.norm_weights()
+
 
 
 class UnconditionalDiffusionModel(nn.Module):
@@ -63,6 +66,9 @@ class UnconditionalDiffusionModel(nn.Module):
         logits = self.backbone(x)
         output = self.last(logits)
         return output
+
+    def norm_weights(self):
+        self.backbone.norm_weights()
 
 
 class RewardDiffusionModel(nn.Module):
@@ -98,3 +104,6 @@ class RewardDiffusionModel(nn.Module):
         state_output = self.state_layer(logits)
         reward_output = self.reward_layer(logits)
         return state_output, reward_output
+
+    def norm_weights(self):
+        self.backbone.norm_weights()

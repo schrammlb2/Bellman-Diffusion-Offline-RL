@@ -31,6 +31,9 @@ class MLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
+    def norm_weights(self):
+        pass
+
 
 
 class NormedMLP(nn.Module):
@@ -58,6 +61,9 @@ class NormedMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
+
+    def norm_weights(self):
+        pass
 
 class VecNormMLP(nn.Module):
     def __init__(
@@ -89,3 +95,5 @@ class VecNormMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
+    def norm_weights(self):
+        pass
