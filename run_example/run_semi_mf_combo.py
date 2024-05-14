@@ -12,11 +12,10 @@ from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import ActorProb, Critic, TanhDiagGaussian
 from offlinerlkit.modules import DiffusionModel, UnconditionalDiffusionModel
 from offlinerlkit.utils.load_dataset import qlearning_dataset
-from offlinerlkit.buffer import ReplayBuffer
+from offlinerlkit.buffer import ReplayBuffer, StateBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
-from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import MFComboPolicy
-# from offlinerlkit.policy import MFStoredSemiMFCOMBOPolicy as MFComboPolicy
+from offlinerlkit.policy_trainer import MFPolicyTrainer, SemiMBPolicyTrainer
+from offlinerlkit.policy import SemiMFCOMBOPolicy
 
 
 """
@@ -27,7 +26,7 @@ cql-weight=5.0, temperature=1.0 for all D4RL-Gym tasks
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="mf_combo")
+    parser.add_argument("--algo-name", type=str, default="semi_mf_combo")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=0)
     # parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256, 256])
@@ -118,7 +117,7 @@ def train(args=get_args()):
         alpha = args.alpha
 
     # create policy
-    policy = MFComboPolicy(
+    policy = SemiMFCOMBOPolicy(
         actor,
         critic1,
         critic2,
@@ -140,6 +139,8 @@ def train(args=get_args()):
         cql_alpha_lr=args.cql_alpha_lr,
         num_repeart_actions=args.num_repeat_actions
     )
+    import ipdb
+    ipdb.set_trace()
 
     # create buffer
     buffer = ReplayBuffer(
@@ -151,6 +152,13 @@ def train(args=get_args()):
         device=args.device
     )
     buffer.load_dataset(dataset)
+    fake_buffer = StateBuffer(
+        buffer_size=0,
+        obs_shape=args.obs_shape,
+        obs_dtype=np.float32,
+        device=args.device
+    )
+
 
     # log
     log_dirs = make_log_dirs(args.task, args.algo_name, args.seed, vars(args))
@@ -163,16 +171,20 @@ def train(args=get_args()):
     logger = Logger(log_dirs, output_config)
     logger.log_hyperparameters(vars(args))
 
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(actor_optim, args.epoch)
     # create policy trainer
-    policy_trainer = MFPolicyTrainer(
+    # policy_trainer = MFPolicyTrainer(
+    policy_trainer = SemiMBPolicyTrainer(
         policy=policy,
         eval_env=env,
         buffer=buffer,
+        fake_buffer=fake_buffer,
         logger=logger,
         epoch=args.epoch,
         step_per_epoch=args.step_per_epoch,
         batch_size=args.batch_size,
-        eval_episodes=args.eval_episodes
+        eval_episodes=args.eval_episodes, 
+        lr_scheduler=lr_scheduler
     )
 
     # train

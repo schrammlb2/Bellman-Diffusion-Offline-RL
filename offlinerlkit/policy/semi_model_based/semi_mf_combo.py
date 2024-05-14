@@ -1,51 +1,46 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import gym
 
 from torch.nn import functional as F
-from typing import Dict, Union, Tuple, Callable
+from typing import Dict, Union, Tuple
+from offlinerlkit.policy import SACPolicy
 from copy import deepcopy
-
 
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.optimization import get_scheduler
 
-from offlinerlkit.policy import TD3Policy
-from offlinerlkit.utils.noise import GaussianNoise
-from offlinerlkit.utils.scaler import StandardScaler
 
+from offlinerlkit.buffer import StateBuffer
 
-class KLRegSACPolicy(TD3Policy):
+class SemiMFCOMBOPolicy(SACPolicy):
     """
-    TD3+BC <Ref: https://arxiv.org/abs/2106.06860>
+    Conservative Q-Learning <Ref: https://arxiv.org/abs/2006.04779>
     """
-
     def __init__(
         self,
         actor: nn.Module,
         critic1: nn.Module,
         critic2: nn.Module,
         diffusion_model: nn.Module,
-        data_diffusion_model: nn.Module,
         actor_optim: torch.optim.Optimizer,
         critic1_optim: torch.optim.Optimizer,
         critic2_optim: torch.optim.Optimizer,
         diffusion_model_optim: torch.optim.Optimizer,
-        data_diffusion_model_optim: torch.optim.Optimizer,
+        action_space: gym.spaces.Space,
         tau: float = 0.005,
         gamma: float  = 0.99,
-        max_action: float = 1.0,
-        exploration_noise: Callable = GaussianNoise,
-        policy_noise: float = 0.2,
-        noise_clip: float = 0.5,
-        update_actor_freq: int = 2,
-        action_reg_weight: float = 0.01,
-        state_reg_weight: float = 1.,
-        alpha: float = 2.5,
-        num_diffusion_iters: int = 10,
-        scaler: StandardScaler = None
+        alpha: Union[float, Tuple[float, torch.Tensor, torch.optim.Optimizer]] = 0.2,
+        cql_weight: float = 1.0,
+        temperature: float = 1.0,
+        max_q_backup: bool = False,
+        deterministic_backup: bool = True,
+        with_lagrange: bool = True,
+        lagrange_threshold: float = 10.0,
+        cql_alpha_lr: float = 1e-4,
+        num_repeart_actions:int = 10,
     ) -> None:
-
         super().__init__(
             actor,
             critic1,
@@ -55,58 +50,75 @@ class KLRegSACPolicy(TD3Policy):
             critic2_optim,
             tau=tau,
             gamma=gamma,
-            max_action=max_action,
-            exploration_noise=exploration_noise,
-            policy_noise=policy_noise,
-            noise_clip=noise_clip,
-            update_actor_freq=update_actor_freq
+            alpha=alpha
         )
 
-        self._alpha = alpha
-        self.scaler = scaler
-        self.action_reg_weight = action_reg_weight
-        self.state_reg_weight = state_reg_weight
+        for _ in range(100):
+            print("Test")
+
+        self.action_space = action_space
+        self._cql_weight = cql_weight
+        self._temperature = temperature
+        self._max_q_backup = max_q_backup
+        self._deterministic_backup = deterministic_backup
+        self._with_lagrange = with_lagrange
+        self._lagrange_threshold = lagrange_threshold
+
+        self.cql_log_alpha = torch.zeros(1, requires_grad=True, device=self.actor.device)
+        self.cql_alpha_optim = torch.optim.Adam([self.cql_log_alpha], lr=cql_alpha_lr)
+
         self.diffusion_model = diffusion_model
         self.diffusion_model_old = deepcopy(diffusion_model)
         self.diffusion_model_optim = diffusion_model_optim
-        self.data_diffusion_model = data_diffusion_model
-        self.data_diffusion_model_old = deepcopy(data_diffusion_model)
-        self.data_diffusion_model_optim = data_diffusion_model_optim
 
-        self.num_diffusion_iters = num_diffusion_iters
+        self._num_repeat_actions = num_repeart_actions
+
+        self.num_diffusion_iters = 10
         self.noise_scheduler = DDPMScheduler(
-            num_train_timesteps=num_diffusion_iters,
+            num_train_timesteps=self.num_diffusion_iters,
             beta_schedule="squaredcos_cap_v2",
             clip_sample=False,
             # our network predicts noise (instead of denoised action)
             prediction_type="sample",
         )
     
+    def map_i(self, t):
+        return -1 + 2*t/self.num_diffusion_iters
+
+
+    def sample(self, obss):
+        with torch.no_grad():
+            a, log_probs = self.actforward(obss)
+            batch_size = obss.shape[0]
+            diff_steps = torch.randint(0, 
+                self.num_diffusion_iters, 
+                (batch_size, 1)
+            ).long().to(obss.device)
+            obss_noise = torch.randn(obss.shape, device=obss.device)
+            noised_obss = self.add_noise(obss, obss_noise, diff_steps) 
+            future_obss = self.predict(
+                    model=self.diffusion_model_old,
+                    noise=obss_noise, obs=obss, a=a
+            ).detach()
+
+        samples = {
+            "obss": future_obss.cpu()
+        }
+        return samples
+
     def train(self) -> None:
-        self.actor.train()
-        self.critic1.train()
-        self.critic2.train()
+        super().train()
         self.diffusion_model.train()
 
     def eval(self) -> None:
-        self.actor.eval()
-        self.critic1.eval()
-        self.critic2.eval()
+        super().eval()
         self.diffusion_model.eval()
-        self.data_diffusion_model.eval()
 
     def _sync_weight(self) -> None:
-        for o, n in zip(self.actor_old.parameters(), self.actor.parameters()):
-            o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
-        for o, n in zip(self.critic1_old.parameters(), self.critic1.parameters()):
-            o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
-        for o, n in zip(self.critic2_old.parameters(), self.critic2.parameters()):
-            o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
+        super()._sync_weight()
         for o, n in zip(self.diffusion_model_old.parameters(), self.diffusion_model.parameters()):
             o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
-        for o, n in zip(self.data_diffusion_model_old.parameters(), self.data_diffusion_model.parameters()):
-            o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
-    
+
 
     def diff_step(
         self,
@@ -212,16 +224,6 @@ class KLRegSACPolicy(TD3Policy):
 
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
-
-    def select_action(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        if self.scaler is not None:
-            obs = self.scaler.transform(obs)
-            with torch.no_grad():
-                action = self.actor(obs).mode()[0].cpu().numpy()
-        if not deterministic:
-            with torch.no_grad():
-                action = self.actor(obs).rsample()[0].cpu().numpy()
-        return action
     
     def predict(self, model, noise, obs, a):
         map_i = lambda t: -1 + 2*t/self.num_diffusion_iters
@@ -232,7 +234,7 @@ class KLRegSACPolicy(TD3Policy):
         for i in range(self.num_diffusion_iters-1, 0, -1):
             epsilon_prediction = model(
                 x=x, obs=obs, 
-                step=map_i(diff_steps*i),
+                step=self.map_i(diff_steps*i),
                 actions=a)
             x = self.diff_step(
                 model_output=epsilon_prediction,
@@ -242,27 +244,42 @@ class KLRegSACPolicy(TD3Policy):
             x_list.append(x)
         
         return x#, torch.stack(x_list, 0)
-  
-    def learn(self, batch: Dict) -> Dict[str, float]:
+
+
+    def calc_pi_values(
+        self,
+        obs_pi: torch.Tensor,
+        obs_to_pred: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        act, log_prob = self.actforward(obs_pi)
+
+        q1 = self.critic1(obs_to_pred, act)
+        q2 = self.critic2(obs_to_pred, act)
+
+        return q1 - log_prob.detach(), q2 - log_prob.detach()
+
+    def calc_random_values(
+        self,
+        obs: torch.Tensor,
+        random_act: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        q1 = self.critic1(obs, random_act)
+        q2 = self.critic2(obs, random_act)
+
+        log_prob1 = np.log(0.5**random_act.shape[-1])
+        log_prob2 = np.log(0.5**random_act.shape[-1])
+
+        return q1 - log_prob1, q2 - log_prob2
+
+
+
+    def update_diffusion(self, batch, pred_next_actions):
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]
-        valid_next_actions = batch["valid_next_actions"]
-        next_actions = batch["next_actions"]
+        # valid_next_actions = batch["valid_next_actions"]
+        # next_actions = batch["next_actions"]
 
-        map_i = lambda t: -1 + 2*t/self.num_diffusion_iters
-        
-        # update critic
-        q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
         with torch.no_grad():
-            # next_actions = self.actor_old(next_obss).rsample()[0]
-            pred_next_actions = self.actor_old(next_obss).mode()[0]
-            next_q = torch.min(
-                self.critic1_old(next_obss, pred_next_actions), 
-                self.critic2_old(next_obss, pred_next_actions)
-            )
-            target_q = rewards + self._gamma * (1 - terminals) * next_q
-
-
             batch_size = rewards.shape[0]
             diff_steps = torch.randint(0, 
                 self.num_diffusion_iters, 
@@ -271,12 +288,7 @@ class KLRegSACPolicy(TD3Policy):
             obss_noise = torch.randn(obss.shape, device=obss.device)
             noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
 
-
         diffusion_list = []
-        # for (model, model_old, model_opt, next_actions_tensor) in [
-        #         (self.diffusion_model, self.diffusion_model_old, self.diffusion_model_optim, pred_next_actions),
-        #         (self.data_diffusion_model, self.data_diffusion_model_old, self.data_diffusion_model_optim, next_actions),
-        #     ]:
         with torch.no_grad():
             next_diff_obss = self.predict(
                     model=self.diffusion_model_old,
@@ -286,17 +298,16 @@ class KLRegSACPolicy(TD3Policy):
             next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
             next_target = self.diffusion_model_old(
                 x=next_noised_obss, obs=next_obss, 
-                step=map_i(diff_steps),
+                step=self.map_i(diff_steps),
                 actions=pred_next_actions).detach()
 
         current_prediction = self.diffusion_model(
-            # x=noised_obss, obs=obss, 
-            x=next_noised_obss, obs=obss, 
-            step=map_i(diff_steps),
+            x=noised_obss, obs=obss, 
+            step=self.map_i(diff_steps),
             actions=actions)
         next_prediction = self.diffusion_model(
             x=next_noised_obss, obs=obss, 
-            step=map_i(diff_steps),
+            step=self.map_i(diff_steps),
             actions=actions)
 
         diffusion_loss = (
@@ -311,90 +322,145 @@ class KLRegSACPolicy(TD3Policy):
         diffusion_loss.backward()
         self.diffusion_model_optim.step()
 
+        return next_diff_obss, diffusion_loss
 
-        data_prediction = self.data_diffusion_model(
-            x=noised_obss, step=map_i(diff_steps)
-        )
-        data_diffusion_loss = ((data_prediction - obss)**2).mean()
-        self.data_diffusion_model_optim.zero_grad()
-        data_diffusion_loss.backward()
-        self.data_diffusion_model_optim.step()
+
+    def learn(self, batch: Dict) -> Dict[str, float]:
+        obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
+            batch["next_observations"], batch["rewards"], batch["terminals"]
+        batch_size = obss.shape[0]
         
+        # update actor
+        a, log_probs = self.actforward(obss)
+        q1a, q2a = self.critic1(obss, a), self.critic2(obss, a)
+        actor_loss = (self._alpha * log_probs - torch.min(q1a, q2a)).mean()
+        self.actor_optim.zero_grad()
+        actor_loss.backward()
+        self.actor_optim.step()
+
+        if self._is_auto_alpha:
+            log_probs = log_probs.detach() + self._target_entropy
+            alpha_loss = -(self._log_alpha * log_probs).mean()
+            self.alpha_optim.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optim.step()
+            self._alpha = self._log_alpha.detach().exp()
+        
+        # compute td error
+        if self._max_q_backup:
+            with torch.no_grad():
+                tmp_next_obss = next_obss.unsqueeze(1) \
+                    .repeat(1, self._num_repeat_actions, 1) \
+                    .view(batch_size * self._num_repeat_actions, next_obss.shape[-1])
+                tmp_next_actions, _ = self.actforward(tmp_next_obss)
+                tmp_next_q1 = self.critic1_old(tmp_next_obss, tmp_next_actions) \
+                    .view(batch_size, self._num_repeat_actions, 1) \
+                    .max(1)[0].view(-1, 1)
+                tmp_next_q2 = self.critic2_old(tmp_next_obss, tmp_next_actions) \
+                    .view(batch_size, self._num_repeat_actions, 1) \
+                    .max(1)[0].view(-1, 1)
+                next_q = torch.min(tmp_next_q1, tmp_next_q2)
+                next_actions = tmp_next_actions
+        else:
+            with torch.no_grad():
+                next_actions, next_log_probs = self.actforward(next_obss)
+                next_q = torch.min(
+                    self.critic1_old(next_obss, next_actions),
+                    self.critic2_old(next_obss, next_actions)
+                )
+                if not self._deterministic_backup:
+                    next_q -= self._alpha * next_log_probs
+
+        target_q = rewards + self._gamma * (1 - terminals) * next_q
+        q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
         critic1_loss = ((q1 - target_q).pow(2)).mean()
         critic2_loss = ((q2 - target_q).pow(2)).mean()
 
+        sampled_states, diffusion_loss = self.update_diffusion(batch, next_actions)
+
+        # compute conservative loss
+        random_actions = torch.FloatTensor(
+            batch_size * self._num_repeat_actions, actions.shape[-1]
+        ).uniform_(self.action_space.low[0], self.action_space.high[0]).to(self.actor.device)
+        # tmp_obss & tmp_next_obss: (batch_size * num_repeat, obs_dim)
+        tmp_obss = obss.unsqueeze(1) \
+            .repeat(1, self._num_repeat_actions, 1) \
+            .view(batch_size * self._num_repeat_actions, obss.shape[-1])
+        tmp_next_obss = next_obss.unsqueeze(1) \
+            .repeat(1, self._num_repeat_actions, 1) \
+            .view(batch_size * self._num_repeat_actions, obss.shape[-1])
+        tmp_sampled_states = sampled_states.unsqueeze(1) \
+            .repeat(1, self._num_repeat_actions, 1) \
+            .view(batch_size * self._num_repeat_actions, obss.shape[-1])
+        
+
+        v1, v2 = [], []
+        obs_pi_value1, obs_pi_value2 = self.calc_pi_values(tmp_obss, tmp_obss)
+        v1.append(obs_pi_value1); v2.append(obs_pi_value2)
+        sample_value1, sample_value2 = self.calc_pi_values(tmp_sampled_states, tmp_sampled_states)
+        v1.append(sample_value1); v2.append(sample_value2)
+        next_obs_pi_value1, next_obs_pi_value2 = self.calc_pi_values(tmp_next_obss, tmp_obss)
+        v1.append(next_obs_pi_value1); v2.append(next_obs_pi_value2)
+        random_value1, random_value2 = self.calc_random_values(tmp_obss, random_actions)
+        v1.append(random_value1); v2.append(random_value2)
+
+        # v1 = [obs_pi_value1, sample_value1, next_obs_pi_value1, random_value1]
+        # v2 = [obs_pi_value2, sample_value2, next_obs_pi_value2, random_value2]
+        for value in v1 + v2:
+            value.reshape(batch_size, self._num_repeat_actions, 1)
+        
+        # for value in [
+        #     obs_pi_value1, obs_pi_value2, next_obs_pi_value1, next_obs_pi_value2,
+        #     sample_value1, sample_value2, random_value1, random_value2
+        # ]:
+        #     value.reshape(batch_size, self._num_repeat_actions, 1)
+        
+        cat_q1 = torch.cat(v1, 1)
+        cat_q2 = torch.cat(v2, 1)
+
+        conservative_loss1 = \
+            torch.logsumexp(cat_q1 / self._temperature, dim=1).mean() * self._cql_weight * self._temperature - \
+            q1.mean() * self._cql_weight
+        conservative_loss2 = \
+            torch.logsumexp(cat_q2 / self._temperature, dim=1).mean() * self._cql_weight * self._temperature - \
+            q2.mean() * self._cql_weight
+        
+        if self._with_lagrange:
+            cql_alpha = torch.clamp(self.cql_log_alpha.exp(), 0.0, 1e6)
+            conservative_loss1 = cql_alpha * (conservative_loss1 - self._lagrange_threshold)
+            conservative_loss2 = cql_alpha * (conservative_loss2 - self._lagrange_threshold)
+
+            self.cql_alpha_optim.zero_grad()
+            cql_alpha_loss = -(conservative_loss1 + conservative_loss2) * 0.5
+            cql_alpha_loss.backward(retain_graph=True)
+            self.cql_alpha_optim.step()
+        
+        critic1_loss = critic1_loss + conservative_loss1
+        critic2_loss = critic2_loss + conservative_loss2
+
+        # update critic
         self.critic1_optim.zero_grad()
-        critic1_loss.backward()
+        critic1_loss.backward(retain_graph=True)
         self.critic1_optim.step()
 
         self.critic2_optim.zero_grad()
         critic2_loss.backward()
         self.critic2_optim.step()
 
-        # update actor
-        if self._cnt % self._freq == 0:
-            # a = self.actor(obss).mode()[1]
-            dist = self.actor(obss)
-            atanh_a = dist.rsample()[1]
-            tanh_a = torch.tanh(atanh_a)
-            sigma = dist.scale
-            q = self.critic1(obss, tanh_a)
+        self._sync_weight()
 
-            rkl_list = []
-            for _ in range(1):
-                atanh_a_new = dist.rsample()[1]
-                tanh_a_new = torch.tanh(atanh_a_new)
-                obss_noise = torch.randn(obss.shape, device=obss.device)
-                # with torch.no_grad():
-                #     pred_obss = self.predict(
-                #             model=self.diffusion_model_old,
-                #             noise=obss_noise, obs=next_obss, a=actions
-                #     ).detach()
-                #     noised_pred_obss  = self.add_noise(pred_obss, obss_noise, diff_steps)
-                pred_obss = self.predict(
-                        model=self.diffusion_model_old,
-                        noise=obss_noise, obs=obss, a=tanh_a_new
-                ).detach()
-                noised_pred_obss  = self.add_noise(pred_obss, obss_noise, diff_steps)
-
-                obs_prediction = self.diffusion_model_old(
-                    x=noised_pred_obss, obs=obss, 
-                    step=map_i(diff_steps),
-                    actions=tanh_a_new
-                )
-                data_obs_prediction = self.data_diffusion_model(
-                    x=noised_pred_obss, step=map_i(diff_steps)
-                )
-                rkl_list.append(((data_obs_prediction - obs_prediction)**2).sum(-1))
-            rkl_tens = torch.stack(rkl_list).mean()
-
-
-            lmbda = self._alpha / q.abs().mean().detach()
-            bound = 0.999
-            atanh_actions = torch.atanh(
-                torch.clamp(actions, 
-                min=-self._max_action*bound, max=self._max_action*bound)
-            )
-            kl = (((atanh_a - atanh_actions).pow(2)*sigma**(-2)).sum(-1).mean() + 2*torch.log(sigma).sum(-1).mean())
-            actor_loss = -lmbda * q.mean() + (
-                self.action_reg_weight*kl  +  self.state_reg_weight*rkl_tens
-            )
-
-            self.actor_optim.zero_grad()
-            actor_loss.backward()
-            self.actor_optim.step()
-            self._last_actor_loss = actor_loss.item()        
-            self._last_q_mean = q.mean().item()           
-            self._last_div = rkl_tens.item()
-            self._sync_weight()
-        
-        self._cnt += 1
-
-        return {
-            "mean_q": self._last_q_mean,
-            "loss/actor": self._last_actor_loss,
+        result =  {
+            "loss/actor": actor_loss.item(),
             "loss/critic1": critic1_loss.item(),
-            "loss/critic2": critic2_loss.item(),
-            "loss/diffusion": diffusion_loss.item(),
-            "loss/div": self._last_div,
+            "loss/critic2": critic2_loss.item()
         }
+
+        if self._is_auto_alpha:
+            result["loss/alpha"] = alpha_loss.item()
+            result["alpha"] = self._alpha.item()
+        if self._with_lagrange:
+            result["loss/cql_alpha"] = cql_alpha_loss.item()
+            result["cql_alpha"] = cql_alpha.item()
+        
+        return result
+
