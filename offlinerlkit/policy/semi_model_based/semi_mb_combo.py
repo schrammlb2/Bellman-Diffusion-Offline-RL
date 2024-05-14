@@ -246,6 +246,59 @@ class SemiMBCOMBOPolicy(CQLPolicy):
         return samples
 
 
+    # def update_diffusion(self, batch):
+    #     obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
+    #         batch["next_observations"], batch["rewards"], batch["terminals"]
+    #     # valid_next_actions = batch["valid_next_actions"]
+    #     # next_actions = batch["next_actions"]
+    #     pred_next_actions, log_probs = self.actforward(obss)
+
+    #     diffusion_list = []
+    #     with torch.no_grad():
+    #         batch_size = rewards.shape[0]
+    #         diff_steps = torch.randint(0, 
+    #             self.num_diffusion_iters, 
+    #             (batch_size, 1)
+    #         ).long().to(obss.device)
+    #         obss_noise = torch.randn(obss.shape, device=obss.device)
+    #         noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+
+
+    #         next_diff_obss = self.predict(
+    #                 model=self.diffusion_model_old,
+    #                 noise=obss_noise, obs=next_obss, a=pred_next_actions
+    #         ).detach()
+    #         noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+    #         next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
+    #         next_target = self.diffusion_model_old(
+    #             x=next_noised_obss, obs=next_obss, 
+    #             step=self.map_i(diff_steps),
+    #             actions=pred_next_actions).detach()
+
+    #     current_prediction = self.diffusion_model(
+    #         x=noised_obss, obs=obss, 
+    #         step=self.map_i(diff_steps),
+    #         actions=actions)
+    #     next_prediction = self.diffusion_model(
+    #         x=next_noised_obss, obs=obss, 
+    #         step=self.map_i(diff_steps),
+    #         actions=actions)
+
+    #     diffusion_loss = (
+    #         (1-self._gamma)*(current_prediction - next_obss)**2 + 
+    #         (self._gamma  )*(next_prediction - next_target)**2
+    #     ).mean()
+    #     diffusion_list.append(diffusion_loss)
+    #     diffusion_loss = torch.stack(diffusion_list).mean()
+
+
+    #     self.diffusion_model_optim.zero_grad()
+    #     diffusion_loss.backward()
+    #     self.diffusion_model_optim.step()
+
+    #     return next_diff_obss, diffusion_loss'
+
+    
     def update_diffusion(self, batch):
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]

@@ -39,7 +39,9 @@ class MBStoredSemiMBCOMBOPolicy(CQLPolicy):
         cql_alpha_lr: float = 1e-4,
         num_repeart_actions:int = 10,
         uniform_rollout: bool = False,
-        rho_s: str = "mix"
+        rho_s: str = "mix", 
+        rollout_length = 5,
+        use_rollout_length = False
     ) -> None:
         super().__init__(
             actor,
@@ -65,8 +67,13 @@ class MBStoredSemiMBCOMBOPolicy(CQLPolicy):
         self._uniform_rollout = uniform_rollout
         self._rho_s = rho_s
 
-        self.rollout_length = 5
-        self.diffusion_gamma = (self.rollout_length - 1)/self.rollout_length
+        self.rollout_length = rollout_length
+        if use_rollout_length:
+            self.diffusion_gamma = (self.rollout_length - 1)/self.rollout_length
+        else: 
+            self.diffusion_gamma = gamma
+
+        print(self.diffusion_gamma)
 
         self.diffusion_model = diffusion_model
         self.diffusion_model_old = deepcopy(diffusion_model)
@@ -246,6 +253,64 @@ class MBStoredSemiMBCOMBOPolicy(CQLPolicy):
         return samples
 
 
+    # def update_diffusion(self, batch):
+    #     obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
+    #         batch["next_observations"], batch["rewards"], batch["terminals"]
+    #     # valid_next_actions = batch["valid_next_actions"]
+    #     # next_actions = batch["next_actions"]
+    #     pred_next_actions, log_probs = self.actforward(obss)
+
+    #     diffusion_list = []
+    #     with torch.no_grad():
+    #         batch_size = rewards.shape[0]
+    #         diff_steps = torch.randint(0, 
+    #             self.num_diffusion_iters, 
+    #             (batch_size, 1)
+    #         ).long().to(obss.device)
+    #         obss_noise = torch.randn(obss.shape, device=obss.device)
+    #         noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+
+
+    #         next_diff_obss = self.predict(
+    #                 model=self.diffusion_model_old,
+    #                 noise=obss_noise, obs=next_obss, a=pred_next_actions
+    #         ).detach()
+    #         noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+    #         next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
+    #         next_target = self.diffusion_model_old(
+    #             x=next_noised_obss, obs=next_obss, 
+    #             step=self.map_i(diff_steps),
+    #             actions=pred_next_actions).detach()
+
+    #     current_prediction = self.diffusion_model(
+    #         # x=noised_obss, obs=obss, 
+    #         x=next_noised_obss, obs=obss, 
+    #         step=self.map_i(diff_steps),
+    #         actions=actions)
+    #     next_prediction = current_prediction
+    #     # next_prediction = self.diffusion_model(
+    #     #     x=next_noised_obss, obs=obss, 
+    #     #     step=self.map_i(diff_steps),
+    #     #     actions=actions)
+
+    #     # diffusion_loss = (
+    #     #     (1-self._gamma)*(current_prediction - next_obss)**2 + 
+    #     #     (self._gamma  )*(next_prediction - next_target)**2
+    #     # ).mean()
+    #     diffusion_loss = (
+    #         (1-self.diffusion_gamma)*(current_prediction - next_obss)**2 + 
+    #         (  self.diffusion_gamma)*(next_prediction  - next_target)**2
+    #     ).mean()
+    #     diffusion_list.append(diffusion_loss)
+    #     diffusion_loss = torch.stack(diffusion_list).mean()
+
+
+    #     self.diffusion_model_optim.zero_grad()
+    #     diffusion_loss.backward()
+    #     self.diffusion_model_optim.step()
+
+    #     return next_diff_obss, diffusion_loss
+
     def update_diffusion(self, batch):
         obss, actions, next_obss, rewards, terminals = batch["observations"], batch["actions"], \
             batch["next_observations"], batch["rewards"], batch["terminals"]
@@ -264,27 +329,27 @@ class MBStoredSemiMBCOMBOPolicy(CQLPolicy):
             noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
 
 
-            next_diff_obss = self.predict(
+            pred_obss = self.predict(
                     model=self.diffusion_model_old,
                     noise=obss_noise, obs=next_obss, a=pred_next_actions
             ).detach()
-            noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
-            next_noised_obss = self.add_noise(next_diff_obss, obss_noise, diff_steps)            
+            noised_next_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+            noised_pred_obss = self.add_noise(pred_obss, obss_noise, diff_steps)            
             next_target = self.diffusion_model_old(
-                x=next_noised_obss, obs=next_obss, 
+                x=noised_pred_obss , obs=next_obss, 
                 step=self.map_i(diff_steps),
                 actions=pred_next_actions).detach()
 
         current_prediction = self.diffusion_model(
-            # x=noised_obss, obs=obss, 
-            x=next_noised_obss, obs=obss, 
+            x=noised_next_obss, obs=obss, 
+            # x=next_noised_obss, obs=obss, 
             step=self.map_i(diff_steps),
             actions=actions)
-        next_prediction = current_prediction
-        # next_prediction = self.diffusion_model(
-        #     x=next_noised_obss, obs=obss, 
-        #     step=self.map_i(diff_steps),
-        #     actions=actions)
+        # next_prediction = current_prediction
+        next_prediction = self.diffusion_model(
+            x=noised_pred_obss , obs=obss, 
+            step=self.map_i(diff_steps),
+            actions=actions)
 
         # diffusion_loss = (
         #     (1-self._gamma)*(current_prediction - next_obss)**2 + 
@@ -302,7 +367,7 @@ class MBStoredSemiMBCOMBOPolicy(CQLPolicy):
         diffusion_loss.backward()
         self.diffusion_model_optim.step()
 
-        return next_diff_obss, diffusion_loss
+        return pred_obss, diffusion_loss
 
     
     def learn(self, batch: Dict) -> Dict[str, float]:

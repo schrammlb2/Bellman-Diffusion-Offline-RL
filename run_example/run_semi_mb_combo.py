@@ -72,6 +72,8 @@ def get_args():
     parser.add_argument("--rollout-freq", type=int, default=1000)
     parser.add_argument("--rollout-batch-size", type=int, default=50000)
     parser.add_argument("--rollout-length", type=int, default=5)
+    parser.add_argument("--use-rollout-length", action='store_true', 
+        help='Use the rollout_length to set the diffusion discount factor. Use gamma otherwise')
     parser.add_argument("--model-retain-epochs", type=int, default=5)
     parser.add_argument("--real-ratio", type=float, default=0.5)
     parser.add_argument("--load-dynamics-path", type=str, default=None)
@@ -163,7 +165,9 @@ def train(args=get_args()):
         cql_alpha_lr=args.cql_alpha_lr,
         num_repeart_actions=args.num_repeat_actions,
         uniform_rollout=args.uniform_rollout,
-        rho_s=args.rho_s
+        rho_s=args.rho_s,
+        rollout_length=args.rollout_length,
+        use_rollout_length=args.use_rollout_length
     )
 
     # create buffer
