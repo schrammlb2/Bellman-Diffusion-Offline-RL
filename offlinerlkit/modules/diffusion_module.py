@@ -5,11 +5,11 @@ from torch.nn import functional as F
 from typing import Union, Optional
 
 
-class DiffusionModel(nn.Module):
+class DiffusionNetwork(nn.Module):
     def __init__(
         self, 
         backbone: nn.Module, 
-        obs_dim: int, 
+        output_dim: int, 
         device: str = "cpu"
     ) -> None:
         super().__init__()
@@ -17,7 +17,7 @@ class DiffusionModel(nn.Module):
         self.device = torch.device(device)
         self.backbone = backbone.to(device)
         latent_dim = getattr(backbone, "output_dim")
-        output_dim = obs_dim
+        output_dim = output_dim
         self.last = nn.Linear(latent_dim, output_dim).to(device)
 
     def forward(
@@ -41,8 +41,24 @@ class DiffusionModel(nn.Module):
         self.backbone.norm_weights()
 
 
+class GenericDiffusionNetwork(DiffusionNetwork):
+    def forward(
+        self,
+        x: Union[np.ndarray, torch.Tensor],
+        condition: Union[np.ndarray, torch.Tensor],
+        step: Union[np.ndarray, torch.Tensor], 
+    ) -> torch.Tensor:
+        x = torch.as_tensor(x, device=self.device, dtype=torch.float32)
+        condition = torch.as_tensor(condition, device=self.device, dtype=torch.float32)
+        step = torch.as_tensor(step, device=self.device, dtype=torch.float32)
+        inpt = torch.cat([x, condition, step], dim=1)
+        logits = self.backbone(inpt)
+        output = self.last(logits)
+        return output
 
-class UnconditionalDiffusionModel(nn.Module):
+
+
+class UnconditionalDiffusionNetwork(nn.Module):
     def __init__(
         self, 
         backbone: nn.Module, 

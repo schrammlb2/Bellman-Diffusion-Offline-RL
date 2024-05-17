@@ -12,7 +12,7 @@ import torch
 
 from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import ActorProb, Critic, TanhDiagGaussian, EnsembleDynamicsModel
-from offlinerlkit.modules import DiffusionModel, UnconditionalDiffusionModel
+from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork
 from offlinerlkit.dynamics import EnsembleDynamics
 from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.utils.termination_fns import get_termination_fn
@@ -21,6 +21,7 @@ from offlinerlkit.buffer import ReplayBuffer, StateBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import SemiMBPolicyTrainer
 from offlinerlkit.policy import MBStoredSemiMBCOMBOPolicy
+# from offlinerlkit.policy import MBStoredSemiMBCOMBO2Policy
 
 
 """
@@ -119,7 +120,7 @@ def train(args=get_args()):
     actor = ActorProb(actor_backbone, dist, args.device)
     critic1 = Critic(critic1_backbone, args.device)
     critic2 = Critic(critic2_backbone, args.device)
-    diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args.obs_shape), device=args.device)
+    diffusion_model = DiffusionNetwork(diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)

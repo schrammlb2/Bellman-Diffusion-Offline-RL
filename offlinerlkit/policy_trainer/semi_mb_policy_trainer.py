@@ -78,7 +78,9 @@ class SemiMBPolicyTrainer:
                 pbar.set_postfix(**loss)
 
                 for k, v in loss.items():
-                    self.logger.logkv_mean(k, v)
+                    self.logger.logkv_mean(k, v) 
+
+                num_timesteps += 1
                 
                 
 
