@@ -10,7 +10,7 @@ import torch
 
 from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import Actor, ActorProb, Critic, TanhDiagGaussian 
-from offlinerlkit.modules import DiffusionModel, UnconditionalDiffusionModel
+from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.utils.scaler import StandardScaler
@@ -48,6 +48,7 @@ def get_args():
     parser.add_argument("--eval_episodes", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--reg-scaling", type=float, default=1)
 
     return parser.parse_args()
 
@@ -112,13 +113,13 @@ def train(args=get_args()):
 
     critic1 = Critic(critic1_backbone, args.device)
     critic2 = Critic(critic2_backbone, args.device)
-    diffusion_model = DiffusionModel(diffusion_backbone, obs_dim=np.prod(args.obs_shape), device=args.device)
-    data_diffusion_model = UnconditionalDiffusionModel(data_diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
+    diffusion_model = DiffusionNetwork(diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
+    data_diffusion_model = UnconditionalDiffusionNetwork(data_diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
 
-    div=10
+    div=1
     diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr/div)
     data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=args.critic_lr/div)
 
@@ -147,7 +148,9 @@ def train(args=get_args()):
         update_actor_freq=args.update_actor_freq,
         alpha=args.alpha,
         num_diffusion_iters=args.num_diffusion_iters,
-        scaler=scaler
+        scaler=scaler,
+        action_reg_weight=0.01*args.reg_scaling,
+        state_reg_weight=1*args.reg_scaling,
     )
 
     # log

@@ -204,6 +204,7 @@ class DiffusionModel:
             noised_obss = self.add_noise(obss, obss_noise, diff_steps) 
             future_obss = self.predict(
                     model=self.diffusion_model_old,
+                    # model=self.diffusion_model,
                     noise=obss_noise, obs=obss, a=a
             ).detach()
         samples = {

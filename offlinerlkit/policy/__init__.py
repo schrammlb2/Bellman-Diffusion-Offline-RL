@@ -39,6 +39,7 @@ from offlinerlkit.policy.model_based.mopo import MOPOPolicy
 from offlinerlkit.policy.model_based.mobile import MOBILEPolicy
 from offlinerlkit.policy.model_based.rambo import RAMBOPolicy
 from offlinerlkit.policy.model_based.combo import COMBOPolicy
+from offlinerlkit.policy.model_based.diffusion_combo import DiffusionCOMBOPolicy
 from offlinerlkit.policy.model_based.bellman_on_data_only_combo import RealBellmanCOMBOPolicy
 
 # from offlinerlkit.policy.semi_model_based.semi_mb_combo import SemiMBCOMBOPolicy
@@ -79,6 +80,7 @@ __all__ = [
     "MOBILEPolicy",
     "RAMBOPolicy",
     "COMBOPolicy",
+    "DiffusionCOMBOPolicy",
     "RealBellmanCOMBOPolicy",
     "SemiMBCOMBOPolicy",
     "SemiMFCOMBOPolicy",

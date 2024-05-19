@@ -10,8 +10,9 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP
+from offlinerlkit.nets import MLP, NormedMLP
 from offlinerlkit.modules import ActorProb, Critic, TanhDiagGaussian, EnsembleDynamicsModel
+from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork, GenericDiffusionNetwork
 from offlinerlkit.dynamics import EnsembleDynamics
 from offlinerlkit.utils.scaler import StandardScaler
 from offlinerlkit.utils.termination_fns import get_termination_fn
@@ -19,7 +20,7 @@ from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.buffer import ReplayBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MBPolicyTrainer
-from offlinerlkit.policy import COMBOPolicy
+from offlinerlkit.policy import DiffusionCOMBOPolicy, COMBOPolicy
 
 
 """
@@ -39,12 +40,13 @@ walker2d-medium-expert-v2: rollout-length=1, cql-weight=5.0
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo-name", type=str, default="combo")
+    parser.add_argument("--algo-name", type=str, default="diffusion_combo")
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256, 256])
+    parser.add_argument("--diffusion-hidden-dims", type=int, nargs='*', default=[512, 512])
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--alpha", type=float, default=0.2)
@@ -104,6 +106,8 @@ def train(args=get_args()):
     actor_backbone = MLP(input_dim=np.prod(args.obs_shape), hidden_dims=args.hidden_dims)
     critic1_backbone = MLP(input_dim=np.prod(args.obs_shape) + args.action_dim, hidden_dims=args.hidden_dims)
     critic2_backbone = MLP(input_dim=np.prod(args.obs_shape) + args.action_dim, hidden_dims=args.hidden_dims)
+    diffusion_backbone = NormedMLP(input_dim=2*np.prod(args.obs_shape)+args.action_dim + 1, 
+        hidden_dims=args.diffusion_hidden_dims)
     dist = TanhDiagGaussian(
         latent_dim=getattr(actor_backbone, "output_dim"),
         output_dim=args.action_dim,
@@ -114,9 +118,11 @@ def train(args=get_args()):
     actor = ActorProb(actor_backbone, dist, args.device)
     critic1 = Critic(critic1_backbone, args.device)
     critic2 = Critic(critic2_backbone, args.device)
+    diffusion_model = GenericDiffusionNetwork(diffusion_backbone, output_dim=np.prod(args.obs_shape), device=args.device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
+    diffusion_model_optim = torch.optim.Adam(diffusion_model.parameters(), lr=args.critic_lr)
 
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(actor_optim, args.epoch)
 
@@ -158,17 +164,25 @@ def train(args=get_args()):
         dynamics.load(args.load_dynamics_path)
 
     # create policy
-    policy = COMBOPolicy(
+    
+    diffusion_gamma = args.gamma
+    # l = args.rollout_length
+    # diffusion_gamma = (l-1)/1
+
+    policy = DiffusionCOMBOPolicy(
         dynamics,
         actor,
         critic1,
         critic2,
+        diffusion_model,
         actor_optim,
         critic1_optim,
         critic2_optim,
+        diffusion_model_optim,
         action_space=env.action_space,
         tau=args.tau,
         gamma=args.gamma,
+        diffusion_gamma=diffusion_gamma,
         alpha=alpha,
         cql_weight=args.cql_weight,
         temperature=args.temperature,
@@ -232,6 +246,7 @@ def train(args=get_args()):
     # train
     if not load_dynamics_model:
         dynamics.train(real_buffer.sample_all(), logger, max_epochs_since_update=5)
+        # dynamics.train(real_buffer.sample_all(), logger, max_epochs_since_update=1, batch_size=10000)
     
     policy_trainer.train()
 

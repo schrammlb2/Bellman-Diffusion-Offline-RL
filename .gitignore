@@ -8,4 +8,5 @@
 **/*.txt
 **/.vscode
 **/_log
-**/log*
+**/*log*
+**/combo_log*
