@@ -249,7 +249,7 @@ class ObsDiffusionModel(GenericDiffusionModel):
             num_diffusion_iters
         )
 
-    def sample(self, obss, sample_actions):
+    def sample(self, obss, sample_actions, old=True):
         with torch.no_grad():
             a = sample_actions(obss)
             batch_size = obss.shape[0]
@@ -260,6 +260,10 @@ class ObsDiffusionModel(GenericDiffusionModel):
             obss_noise = torch.randn(obss.shape, device=obss.device)
             noised_obss = self.add_noise(obss, obss_noise, diff_steps)
             condition = torch.cat([obss, a], dim=-1) 
+            if old: 
+                model = self.diffusion_model_old
+            else:
+                model = self.diffusion_model
             future_obss = self._predict(
                     model=self.diffusion_model_old,
                     condition=condition

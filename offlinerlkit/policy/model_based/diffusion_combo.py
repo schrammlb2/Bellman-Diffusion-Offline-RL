@@ -130,7 +130,7 @@ class DiffusionCOMBOPolicy(COMBOPolicy):
         rollout_length: int
     ) -> Tuple[Dict[str, np.ndarray], Dict]:
         obss = torch.tensor(init_obss, device=self.actor.device)
-        predictions = self.diffusion_model.sample(obss, lambda x: self.actforward(x)[0])
+        predictions = self.diffusion_model.sample(obss, lambda x: self.actforward(x)[0], old=False)
         observations = predictions['obss'].numpy()
         if self._uniform_rollout:
             actions = np.random.uniform(
