@@ -8,8 +8,8 @@ conda init bash
 conda activate offline_2
 echo "hello"
 
-sbatch -G 1 halfcheetah_replay.sh
+bash halfcheetah_replay.sh
 sleep 30s
-sbatch -G 1 walker2d_replay.sh
+bash walker2d_replay.sh
 sleep 30s
-sbatch -G 1 hopper_replay.sh
+bash hopper_replay.sh
