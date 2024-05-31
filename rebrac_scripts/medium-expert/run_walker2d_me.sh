@@ -13,16 +13,16 @@ python setup.py install
 
 
 
-cd ~/Desktop/Bellman-Diffusion-Offline-RL/rebrac_scripts/medium-expert/halfcheetah
+cd ~/Desktop/Bellman-Diffusion-Offline-RL/rebrac_scripts/medium-expert/walker2d
 
-sbatch -G 1 None_hc_s0.sh
+sbatch -G 1 me_walk_s0.sh
 sleep 30s
 
-sbatch -G 1 None_hc_s1.sh
+sbatch -G 1 me_walk_s1.sh
 sleep 30s
 
-sbatch -G 1 None_hc_s2.sh
+sbatch -G 1 me_walk_s2.sh
 sleep 30s
 
-sbatch -G 1 None_hc_s3.sh
+sbatch -G 1 me_walk_s3.sh
 sleep 30s

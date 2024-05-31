@@ -13,16 +13,16 @@ python setup.py install
 
 
 
-cd ~/Desktop/Bellman-Diffusion-Offline-RL/rebrac_no_q_scripts/medium-expert/hopper
+cd ~/Desktop/Bellman-Diffusion-Offline-RL/rebrac_no_q_scripts/medium-expert/halfcheetah
 
-sbatch -G 1 None_hop_s0.sh
+sbatch -G 1 me_hc_s0.sh
 sleep 30s
 
-sbatch -G 1 None_hop_s1.sh
+sbatch -G 1 me_hc_s1.sh
 sleep 30s
 
-sbatch -G 1 None_hop_s2.sh
+sbatch -G 1 me_hc_s2.sh
 sleep 30s
 
-sbatch -G 1 None_hop_s3.sh
+sbatch -G 1 me_hc_s3.sh
 sleep 30s

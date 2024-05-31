@@ -1,12 +1,12 @@
 cd ~/Desktop/Bellman-Diffusion-Offline-RL/rebrac_som_scripts/medium-replay/
-bash rebrac_som_scripts/medium-replay/run_hopper_mr.sh
+bash run_hopper_mr.sh
 sleep 30s
 
 
-bash rebrac_som_scripts/medium-replay/run_halfcheetah_mr.sh
+bash run_halfcheetah_mr.sh
 sleep 30s
 
 
-bash rebrac_som_scripts/medium-replay/run_walker2d_mr.sh
+bash run_walker2d_mr.sh
 sleep 30s
 

@@ -8,14 +8,18 @@ def env_map(env):
 		return "hop"
 	elif env == "walker2d":
 		return "walk"
+	import ipdb
+	ipdb.set_trace()
 
 def data_map(env):
 	if env == "medium":
 		return "m"
 	elif env == "medium-replay":
 		return "mr"
-	elif env == "medium-experted":
+	elif env == "medium-expert":
 		return "me"
+	import ipdb
+	ipdb.set_trace()
 
 template = "sbatch_template.sh"
 for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
@@ -34,7 +38,7 @@ for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
 				filename = f"run_{env}_{data_map(dataset)}.sh"
 				run_env_loc = new_dataset + "/" + filename
 				file.write("\n")
-				file.write(f"bash {run_env_loc}\n")
+				file.write(f"bash {filename}\n")
 				file.write(f"sleep 30s\n")
 				file.write("\n")
 
