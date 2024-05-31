@@ -211,6 +211,8 @@ def train(config: Config):
 
     # log
     # log_dirs = make_log_dirs(task, algo_name, config.train_seed, vars(args))
+    import ipdb
+    ipdb.set_trace()
     log_dirs = make_log_dirs(task, algo_name, config.train_seed, vars(config))
     # key: output file name, value: output handler type
     output_config = {

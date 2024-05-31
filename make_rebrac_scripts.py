@@ -23,8 +23,9 @@ def data_map(env):
 
 template = "sbatch_template.sh"
 for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
-	base_dir = f"{alg}_scripts"
-	method = f"python pyrallis_scripts/run_{alg}.py --config=pyrallis_scripts/configs/offline/rebrac/"
+	base_dir = f"{alg}_scripts"        
+	script_dir = "/common/home/lbs105/Desktop/Bellman-Diffusion-Offline-RL/pyrallis_scripts"
+	method = f"{script_dir}/run_{alg}.py --config={script_dir}/configs/offline/rebrac/"
 	os.mkdir(base_dir)
 	datasets = ["medium", "medium-replay", "medium-expert"]
 	envs = [ "hopper", "halfcheetah", "walker2d"]
@@ -59,7 +60,7 @@ for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
 				shutil.copyfile(template, loc)
 				with open(loc, "a") as file:
 					file.write("\n\n")
-					file.write(method + f"{env}/{dataset}_v2.yaml --train-seed={seed}")
+					file.write(method + f"{env}/{dataset}_v2.yaml --train_seed={seed}")
 
 				with open(run_env_loc, "a") as file:
 					file.write("\n")
