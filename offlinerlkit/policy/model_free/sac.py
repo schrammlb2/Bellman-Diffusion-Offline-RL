@@ -66,7 +66,8 @@ class SACPolicy(BasePolicy):
     def actforward(
         self,
         obs: torch.Tensor,
-        deterministic: bool = False
+        deterministic: bool = False, 
+        squashed: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         dist = self.actor(obs)
         if deterministic:
@@ -74,7 +75,10 @@ class SACPolicy(BasePolicy):
         else:
             squashed_action, raw_action = dist.rsample()
         log_prob = dist.log_prob(squashed_action, raw_action)
-        return squashed_action, log_prob
+        if squashed:
+            return squashed_action, log_prob
+        else:
+            return raw_action, log_prob
 
     def select_action(
         self,

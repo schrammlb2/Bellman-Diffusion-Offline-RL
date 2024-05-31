@@ -44,7 +44,7 @@ def get_args():
     parser.add_argument("--update-actor-freq", type=int, default=2)
     # parser.add_argument("--actor-action-reg-weight", type=float, default=0.4)
     # parser.add_argument("--critic-action-reg-weight", type=float, default=0.4)
-    parser.add_argument("--actor-action-reg-weight", type=float, default=0.1)
+    parser.add_argument("--actor-action-reg-weight", type=float, default=0.01)
     parser.add_argument("--critic-action-reg-weight", type=float, default=0.01)
     parser.add_argument("--epoch", type=int, default=1000)
     parser.add_argument("--step-per-epoch", type=int, default=1000)
@@ -52,6 +52,7 @@ def get_args():
     # parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--no-q", action='store_true')
 
     return parser.parse_args()
 
@@ -102,6 +103,9 @@ def train(args=get_args()):
     args.obs_shape = env.observation_space.shape
     args.action_dim = np.prod(env.action_space.shape)
     args.max_action = env.action_space.high[0]
+    
+    if args.no_q: 
+        args.algo_name += "_no_q"
 
     # create buffer
     buffer = NextActionBuffer(
@@ -155,7 +159,8 @@ def train(args=get_args()):
         update_actor_freq=args.update_actor_freq,        
         actor_action_reg_weight=args.actor_action_reg_weight, 
         critic_action_reg_weight=args.critic_action_reg_weight,
-        scaler=scaler
+        scaler=scaler,
+        no_q=args.no_q
     )
 
     # log

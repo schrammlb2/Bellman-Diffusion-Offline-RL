@@ -108,6 +108,7 @@ def plot_figure(
         ax.legend(loc=2, bbox_to_anchor=(1,1), prop={'size': 10})
     else:
         ax.legend(prop={'size': 10})
+    print(f"{y[-1]} \\pm {shaded[-1]}")
 
 
 def plot_func(

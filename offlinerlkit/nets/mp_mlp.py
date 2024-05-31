@@ -126,7 +126,7 @@ class MPDenseNet(nn.Module):
         cumulative = input_dim
         for in_dim, out_dim in zip(hidden_dims[:-1], hidden_dims[1:]):
             # model += [MPLinear(cumulative, out_dim)]
-            model += [MPMLP(input_dim=cumulative, hidden_dims=[out_dim], output_dim=out_dim)]
+            model += [MPMLP(input_dim=cumulative, hidden_dims=hidden_dims, output_dim=out_dim)]
             cumulative += out_dim
 
         self.cumulative = cumulative

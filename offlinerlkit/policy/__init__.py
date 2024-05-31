@@ -3,8 +3,11 @@ from offlinerlkit.policy.base_policy import BasePolicy
 # model free
 from offlinerlkit.policy.model_free.bc import BCPolicy
 from offlinerlkit.policy.model_free.sac import SACPolicy
+from offlinerlkit.policy.model_free.sackl import SACKLPolicy
 from offlinerlkit.policy.model_free.td3 import TD3Policy
 from offlinerlkit.policy.model_free.rebrac import ReBRACPolicy
+from offlinerlkit.policy.model_free.rebrac_som import ReBRACSOMPolicy
+from offlinerlkit.policy.model_free.sackl2 import SACKL2Policy
 from offlinerlkit.policy.model_free.cql import CQLPolicy
 from offlinerlkit.policy.model_free.mf_combo import MFComboPolicy
 from offlinerlkit.policy.model_free.conservative_sac import ConservativeSACPolicy
@@ -52,8 +55,12 @@ __all__ = [
     "BasePolicy",
     "BCPolicy",
     "SACPolicy",
+    "SACKLPolicy",
+    "SACKL2Policy",
     "ConservativeSACPolicy",
     "TD3Policy",
+    "ReBRACPolicy",
+    "ReBRACSOMPolicy",
     "CQLPolicy",
     "MFComboPolicy",
     "IQLPolicy",
