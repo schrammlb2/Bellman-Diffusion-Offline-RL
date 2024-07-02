@@ -1,0 +1,26 @@
+# for task in "hopper-medium-v2" "halfcheetah-medium-v2"   "walker2d-medium-v2" \
+# 		"hopper-medium-replay-v2" "halfcheetah-medium-replay-v2"   "walker2d-medium-replay-v2" \
+# 	 	"hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2";
+# do 
+# 	#python run_example/plotter.py --task=$task --algos slow_test_kl_reg test_kl_reg td3bc cql --root-dir=ilab_log
+# 	echo $task
+# 	python run_example/plotter.py --task=$task --algos diffusion_combo --root-dir=diff_combo_log #--show
+# done
+
+
+# for task in "hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2" \ 
+# 		"hopper-expert-v2" "halfcheetah-expert-v2"  "walker2d-expert-v2"; 
+# for task in "hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2" \
+# 		"hopper-expert-v2" "halfcheetah-expert-v2"  "walker2d-expert-v2"; 
+for task in "hopper-medium-v2" "halfcheetah-medium-v2"  "walker2d-medium-v2"\
+ 	"hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2"\
+ 	"hopper-medium-replay-v2" "halfcheetah-medium-replay-v2"  "walker2d-medium-replay-v2"\
+ 	"hopper-expert-v2" "halfcheetah-expert-v2"  "walker2d-expert-v2";
+do 
+	#python run_example/plotter.py --task=$task --algos slow_test_kl_reg test_kl_reg td3bc cql --root-dir=ilab_log
+	echo $task
+	# python run_example/plotter.py --task=$task --algos rebracno_q rebrac_som_no_q --root-dir=bc_log_5
+	# python run_example/plotter.py --task=$task --algos rebrac rebrac_som --root-dir=bc_log_5
+	# python run_example/plotter.py --task=$task --algos rebrac rebrac_som_no_q --root-dir=bc_log_5
+	python run_example/plotter.py --task=$task --algos rebrac rebrac_som rebracno_q rebrac_som_no_q --root-dir=bc_log_5
+done
