@@ -252,7 +252,8 @@ class ReBRACSOMPolicy(ReBRACPolicy):
                 (batch_size, 1)
             ).long().to(obss.device)
             obss_noise = torch.randn(obss.shape, device=obss.device)
-            noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+            # noised_obss = self.add_noise(next_obss, obss_noise, diff_steps) 
+            noised_obss = self.add_noise(obss, obss_noise, diff_steps) 
 
         diffusion_list = []
         with torch.no_grad():
@@ -277,7 +278,7 @@ class ReBRACSOMPolicy(ReBRACPolicy):
             actions=actions)
 
         diffusion_loss = (
-            (1-self._gamma)*(current_prediction - next_obss)**2 + 
+            (1-self._gamma)*(current_prediction - obss)**2 + 
             (self._gamma  )*(next_prediction -  next_target)**2
         ).mean()
         diffusion_list.append(diffusion_loss)
@@ -384,20 +385,26 @@ class ReBRACSOMPolicy(ReBRACPolicy):
             rand_obss = self.rand_like(obss)
             rand_a = self.actor(rand_obss)
 
+            mix_state_bc = False
+            if mix_state_bc:
             #Mix the batches
-            mixed_obss = torch.cat([obss, rand_obss], dim=0)
-            mixed_a = torch.cat([a, rand_a], dim=0)
-            state_bc_penalty = self.state_bc(mixed_obss, a=mixed_a)
+                mixed_obss = torch.cat([obss, rand_obss], dim=0)
+                mixed_a = torch.cat([a, rand_a], dim=0)
+                state_bc_penalty = self.state_bc(mixed_obss, a=mixed_a)
 
-            if self.use_q:
-                q = self.critic1(obss, a)
-                lmbda = 1 / q.abs().mean().detach()
-                # actor_loss = -lmbda * q.mean() + self.actor_action_reg_weight*((a - actions).pow(2)).mean()
-                actor_loss = -lmbda * q.mean() + bc_penalty + state_bc_penalty
-            else: 
-                actor_loss = bc_penalty + state_bc_penalty
+                if self.use_q:
+                    q = self.critic1(obss, a)
+                    lmbda = 1 / q.abs().mean().detach()
+                    # actor_loss = -lmbda * q.mean() + self.actor_action_reg_weight*((a - actions).pow(2)).mean()
+                    actor_loss = -lmbda * q.mean() + bc_penalty + state_bc_penalty
+                else: 
+                    actor_loss = bc_penalty + state_bc_penalty
                 #ReBRAC sums over action dim
-                #Try using ReBRAC coefficients and with the sum, see if this lets you match ReBRAC perf. 
+                #Try using ReBRAC coefficients and with the sum, see if this lets you match ReBRAC perf.
+            else:
+                state_bc_penalty = self.state_bc(rand_obss, a=rand_a)
+                actor_loss = bc_penalty + state_bc_penalty
+
 
             # actor_loss = bc_penalty
 

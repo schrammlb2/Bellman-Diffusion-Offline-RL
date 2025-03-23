@@ -96,6 +96,140 @@ def qlearning_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
         'terminals': np.array(done_),
     }
 
+def qlearning_sequence_dataset(env, dataset=None, terminate_on_end=False, k=5, gamma=0.99, **kwargs):
+    """
+    Returns datasets formatted for use by standard Q-learning algorithms,
+    with observations, actions, next_observations, rewards, and a terminal
+    flag.
+
+    Args:
+        env: An OfflineEnv object.
+        dataset: An optional dataset to pass in for processing. If None,
+            the dataset will default to env.get_dataset()
+        terminate_on_end (bool): Set done=True on the last timestep
+            in a trajectory. Default is False, and will discard the
+            last timestep in each trajectory.
+        **kwargs: Arguments to pass to env.get_dataset().
+
+    Returns:
+        A dictionary containing keys:
+            observations: An N x dim_obs array of observations.
+            actions: An N x dim_action array of actions.
+            next_observations: An N x dim_obs array of next observations.
+            rewards: An N-dim float array of rewards.
+            terminals: An N-dim boolean array of "done" or episode termination flags.
+    """
+    if dataset is None:
+        dataset = env.get_dataset(**kwargs)
+    
+    has_next_obs = True if 'next_observations' in dataset.keys() else False
+
+    N = dataset['rewards'].shape[0]
+    obs_ = []
+    next_obs_ = []
+    action_ = []
+    next_action_ = []
+    valid_next_action_ = []
+    reward_ = []
+    done_ = []
+
+    # The newer version of the dataset adds an explicit
+    # timeouts field. Keep old method for backwards compatability.
+    use_timeouts = False
+    if 'timeouts' in dataset:
+        use_timeouts = True
+
+    episode_step = 0
+    episode_counter = 0
+    for i in range(N-1):
+        obs = dataset['observations'][i].astype(np.float32)
+        eps = 0.001
+        if has_next_obs:
+            new_obs = dataset['next_observations'][i].astype(np.float32)
+            valid_new_action = 1.*(
+                ((new_obs - dataset['observations'][i+1].astype(np.float32))**2).sum() < eps
+            )
+            new_action = dataset['actions'][i+1].astype(np.float32)
+        else:
+            valid_new_action = True
+            new_obs = dataset['observations'][i+1].astype(np.float32)
+            new_action = dataset['actions'][i+1].astype(np.float32)
+        action = dataset['actions'][i].astype(np.float32)
+        reward = dataset['rewards'][i].astype(np.float32)
+        done_bool = bool(dataset['terminals'][i])
+
+        if use_timeouts:
+            final_timestep = dataset['timeouts'][i]
+        else:
+            final_timestep = (episode_step == env._max_episode_steps - 1)
+        if (not terminate_on_end) and final_timestep:
+            # Skip this transition and don't apply terminals on the last step of an episode
+            episode_step = 0
+            episode_counter+=1
+            continue  
+        if done_bool or final_timestep:
+            episode_step = 0
+            episode_counter+=1
+            if not has_next_obs:
+                continue
+
+        obs_.append(obs)
+        next_obs_.append(new_obs)
+        action_.append(action)
+        next_action_.append(new_action)
+        valid_next_action_.append(valid_new_action)
+        reward_.append(reward)
+        done_.append(done_bool)
+        episode_step += 1
+
+
+    # k_future_samples = []
+    # for i in range(terminals.shape[0]):
+    #     if terminals[i] != True:
+    #         continue
+    #     else:
+    #         final_timestep = i
+    #         for t in range(first_timestep, i + 1):
+    #             obs_slice = observations[t:i+1]
+    #             samples = obs_slice[np.random.choice(slice.shape[0], k, replace=True)]
+    #             k_future_samples.append(samples)
+    #         #--------------------------
+    #         first_timestep = i+1
+    terminals = np.array(done_)
+    observations = np.array(obs_)
+    first_timestep = 0
+    future_obs_list = []
+    valid_future_obs_list = []
+    for i in range(k):
+        offset = np.random.geometric(1-gamma, size=terminals.shape[0]) + 1
+        inds = np.arange(terminals.shape[0])
+        future_ind = inds + offset
+        valid_list = []
+        #If this is a bottleneck, rewrite as scatter or gather operation
+        for index in range(terminals.shape[0]):
+            slice=terminals[inds[index]:future_ind[index]]
+            valid = (future_ind[index] < terminals.shape[0]) and (slice.sum() == 0)
+            valid_list.append(valid)
+
+        future_ind = np.clip(future_ind, a_min=0, a_max=terminals.shape[0]-1)
+        future_obs = observations[future_ind]
+        future_obs_list.append(future_obs)
+        valid_future_obs_list.append(np.array(valid_list))
+
+    future_obs_array = np.stack(future_obs_list, axis=1)
+    valid_future_obs_array = np.stack(valid_future_obs_list, axis=1)
+    return {
+        'observations': np.array(obs_),
+        'actions': np.array(action_),
+        'next_observations': np.array(next_obs_),
+        'next_actions': np.array(next_action_),
+        'valid_next_actions': np.array(valid_next_action_),
+        'rewards': np.array(reward_),
+        'terminals': np.array(done_),
+        'future_obs': future_obs_array,
+        'valid_future_obs': valid_future_obs_array,
+    }
+
 
 class SequenceDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, max_len, max_ep_len=1000, device="cpu"):

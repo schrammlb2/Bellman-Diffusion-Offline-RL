@@ -22,6 +22,15 @@ COLORS = (
     ]
 )
 
+def rename_algo(title):
+    if title == "rebrac_som":
+        return "rebrac + SOMBC"
+    if title == "rebracno_q":
+        return "BC"
+    if title == "rebrac_som_no_q":
+        return "SSM-BC"
+    else: 
+        return title
 
 def merge_csv(root_dir, query_file, query_x, query_y):
     """Merge result in csv_files into a single csv file."""
@@ -95,8 +104,10 @@ def plot_figure(
         x, y, shaded = csv2numpy(csv_file)
         y = smooth(y, smooth_radius)
         shaded = smooth(shaded, smooth_radius)
-        ax.plot(x, y, color=color_list[i], label=algo_name)
+        ax.plot(x, y, color=color_list[i], label=rename_algo(algo_name))
         ax.fill_between(x, y-shaded, y+shaded, color=color_list[i], alpha=0.2)
+
+    # renamed_title = rename_title(title)
     ax.set_title(title, fontdict={'size': 10})
     ax.set_xlabel(x_label, fontdict={'size': 10})
     ax.set_ylabel(y_label, fontdict={'size': 10})
@@ -179,7 +190,7 @@ if __name__ == "__main__":
     parser.add_argument("--title", default=None)
     parser.add_argument("--xlabel", default="Timesteps")
     parser.add_argument("--ylabel", default=None)
-    parser.add_argument("--smooth", type=int, default=10)
+    parser.add_argument("--smooth", type=int, default=3)
     parser.add_argument("--colors", type=str, nargs='*', default=None)
     parser.add_argument("--show", action='store_true')
     # parser.add_argument("--output-path", default="./hopper-medium-expert.png")

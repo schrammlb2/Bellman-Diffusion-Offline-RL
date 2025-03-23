@@ -145,6 +145,10 @@ def train(config: Config):
     device = ("cuda" if torch.cuda.is_available() else "cpu")
     hidden_dims = [config.hidden_dim]*config.critic_n_hiddens
 
+    config.relative_state_bc_coef *= 1
+    config.batch_size *= 4
+    config.actor_learning_rate /= 4
+
     env = gym.make(task)
     dataset = qlearning_dataset(env)
     if 'antmaze' in task:
@@ -227,7 +231,7 @@ def train(config: Config):
         critic_action_reg_weight=config.critic_bc_coef,
         relative_state_reg_weight=config.relative_state_bc_coef,
         scaler=scaler,
-        no_q=False
+        no_q=True
     )
 
     # log

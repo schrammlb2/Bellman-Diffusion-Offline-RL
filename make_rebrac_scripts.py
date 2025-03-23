@@ -18,16 +18,21 @@ def data_map(env):
 		return "mr"
 	elif env == "medium-expert":
 		return "me"
+	elif env == "expert":
+		return "e"
 	import ipdb
 	ipdb.set_trace()
 
+pwd=os.getcwd()
+
 template = "sbatch_template.sh"
 for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
-	base_dir = f"{alg}_scripts"        
-	script_dir = "/common/home/lbs105/Desktop/Bellman-Diffusion-Offline-RL/pyrallis_scripts"
+	base_dir = f"{pwd}/{alg}_scripts"        
+	# script_dir = "/common/home/lbs105/Desktop/Bellman-Diffusion-Offline-RL/pyrallis_scripts"
+	script_dir = f"{pwd}/pyrallis_scripts"
 	method = f"{script_dir}/run_{alg}.py --config={script_dir}/configs/offline/rebrac/"
 	os.mkdir(base_dir)
-	datasets = ["medium", "medium-replay", "medium-expert"]
+	datasets = ["medium", "medium-replay", "medium-expert", "expert"]
 	envs = [ "hopper", "halfcheetah", "walker2d"]
 	for dataset in datasets:
 		new_dataset = base_dir + "/" + dataset

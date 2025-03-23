@@ -31,8 +31,11 @@ class DiffusionNetwork(nn.Module):
         obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
         step = torch.as_tensor(step, device=self.device, dtype=torch.float32)
         if actions is not None:
-            actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32).flatten(1)
-            obs = torch.cat([x, obs, step, actions], dim=1)
+            if len(actions.shape) > len(obs.shape):
+                actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32).flatten(-1)
+                # actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32).flatten(1)
+            # obs = torch.cat([x, obs, step, actions], dim=1)
+            obs = torch.cat([x, obs, step, actions], dim=-1)
         logits = self.backbone(obs)
         output = self.last(logits)
         return output

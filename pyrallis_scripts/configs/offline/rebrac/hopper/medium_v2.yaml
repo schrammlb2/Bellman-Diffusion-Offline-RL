@@ -20,6 +20,7 @@ noise_clip: 0.5
 normalize_q: true
 normalize_reward: false
 normalize_states: false
+# normalize_states: true
 num_epochs: 1000
 num_updates_on_epoch: 1000
 policy_freq: 2
