@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP, NormedMLP, DenseNet, MPDenseNet, AccordionMLP
+from offlinerlkit.nets import MLP, NormedMLP, DenseNet, MPDenseNet#, AccordionMLP
 from offlinerlkit.modules import Actor, Critic
 from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork
 from offlinerlkit.utils.noise import GaussianNoise

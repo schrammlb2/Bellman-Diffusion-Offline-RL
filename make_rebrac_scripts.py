@@ -26,7 +26,8 @@ def data_map(env):
 pwd=os.getcwd()
 
 template = "sbatch_template.sh"
-for alg in ["rebrac", "rebrac_no_q", "rebrac_som", "rebrac_som_no_q"]:
+alg_list = ["rebrac", "rebrac_no_q", "sequential_rebrac_som", "sequential_rebrac_som_no_q"]
+for alg in alg_list:
 	base_dir = f"{pwd}/{alg}_scripts"        
 	# script_dir = "/common/home/lbs105/Desktop/Bellman-Diffusion-Offline-RL/pyrallis_scripts"
 	script_dir = f"{pwd}/pyrallis_scripts"
