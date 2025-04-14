@@ -8,6 +8,7 @@ from offlinerlkit.policy.model_free.td3 import TD3Policy
 from offlinerlkit.policy.model_free.rebrac import ReBRACPolicy
 from offlinerlkit.policy.model_free.sequential_rebrac import SequentialReBRACPolicy
 from offlinerlkit.policy.model_free.rebrac_som import ReBRACSOMPolicy
+from offlinerlkit.policy.model_free.rebrac_som_simple import ReBRACSOMSimplePolicy
 from offlinerlkit.policy.model_free.sackl2 import SACKL2Policy
 from offlinerlkit.policy.model_free.cql import CQLPolicy
 from offlinerlkit.policy.model_free.mf_combo import MFComboPolicy
@@ -61,7 +62,8 @@ __all__ = [
     "ConservativeSACPolicy",
     "TD3Policy",
     "ReBRACPolicy",
-    "SequentialReBRACPolicy"
+    "SequentialReBRACPolicy",
+    "ReBRACSOMSimplePolicy",
     "ReBRACSOMPolicy",
     "CQLPolicy",
     "MFComboPolicy",

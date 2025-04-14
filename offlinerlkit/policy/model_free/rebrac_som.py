@@ -385,7 +385,8 @@ class ReBRACSOMPolicy(ReBRACPolicy):
             rand_obss = self.rand_like(obss)
             rand_a = self.actor(rand_obss)
 
-            mix_state_bc = False
+            # mix_state_bc = False
+            mix_state_bc = True
             if mix_state_bc:
             #Mix the batches
                 mixed_obss = torch.cat([obss, rand_obss], dim=0)
@@ -412,6 +413,7 @@ class ReBRACSOMPolicy(ReBRACPolicy):
             actor_loss.backward()
             self.actor_optim.step()
             self._last_actor_loss = actor_loss.item()
+            self._last_q = q.mean().detach().item()
             self._last_bc_penalty = bc_penalty.item()
             self._last_state_bc_penalty = state_bc_penalty.item()
             self._sync_weight()

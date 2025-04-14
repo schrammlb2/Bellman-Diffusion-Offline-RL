@@ -14,7 +14,7 @@ from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork
 from offlinerlkit.utils.noise import GaussianNoise
 from offlinerlkit.utils.load_dataset import qlearning_dataset, qlearning_sequence_dataset
 from offlinerlkit.utils.scaler import StandardScaler
-from offlinerlkit.buffer import SequentialBuffer
+from offlinerlkit.buffer import SequentialBuffer, RuntimeSequentialBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
 from offlinerlkit.policy import SequentialReBRACPolicy
@@ -99,7 +99,7 @@ class Config:
     relative_state_bc_coef: float = 1.0
 
 
-    k_samples: int = 8
+    k_samples: int = 16
 
     # def __post_init__(self):
     #     self.name = f"{self.name}-{self.dataset_name}-{str(uuid.uuid4())[:8]}"
@@ -145,6 +145,20 @@ def get_next_actions(dataset):
 
 @pyrallis.wrap()
 def train(config: Config):
+    # config.critic_bc_coef /= 3
+    # config.actor_bc_coef /= 3
+    # config.relative_state_bc_coef *= 30
+    # config.actor_learning_rate /= 3
+    no_q = False
+    config.relative_state_bc_coef *= 10
+    div = 100
+    config.actor_learning_rate /= div
+    diffusion_learning_rate = config.critic_learning_rate/div
+    betas = (.9, .999) #Default
+    # betas = (.99, .9999)
+
+
+
     # create env and dataset
     task = config.dataset_name
     algo_name = config.name + "_som"
@@ -152,8 +166,8 @@ def train(config: Config):
     hidden_dims = [config.hidden_dim]*config.critic_n_hiddens
 
     env = gym.make(task)
-    # dataset = qlearning_dataset(env)
-    dataset = qlearning_sequence_dataset(env, k=config.k_samples, gamma=config.gamma)
+    dataset = qlearning_dataset(env)
+    # dataset = qlearning_sequence_dataset(env, k=config.k_samples, gamma=config.gamma)
     if 'antmaze' in task:
         dataset["rewards"] -= 1.0
     obs_shape = env.observation_space.shape
@@ -162,14 +176,24 @@ def train(config: Config):
     
 
     # create buffer
-    buffer = SequentialBuffer(
+    # buffer = SequentialBuffer(
+    #     buffer_size=len(dataset["observations"]),
+    #     samples=config.k_samples,
+    #     obs_shape=obs_shape,
+    #     obs_dtype=np.float32,
+    #     action_dim=action_dim,
+    #     action_dtype=np.float32,
+    #     device=device
+    # )
+    buffer = RuntimeSequentialBuffer(
         buffer_size=len(dataset["observations"]),
         samples=config.k_samples,
         obs_shape=obs_shape,
         obs_dtype=np.float32,
         action_dim=action_dim,
         action_dtype=np.float32,
-        device=device
+        device=device, 
+        gamma=config.gamma
     )
     buffer.load_dataset(dataset)
     obs_mean, obs_std = buffer.normalize_obs()
@@ -217,12 +241,11 @@ def train(config: Config):
     # data_diffusion_model = UnconditionalDiffusionNetwork(
     #     data_diffusion_backbone, output_dim=np.prod(obs_shape), device=device)
 
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.actor_learning_rate)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.actor_learning_rate, betas=betas)
     critic1_optim = torch.optim.Adam(critic1.parameters(), lr=config.critic_learning_rate, weight_decay=0.001)
     critic2_optim = torch.optim.Adam(critic2.parameters(), lr=config.critic_learning_rate, weight_decay=0.001)
 
-    div=1
-    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=config.critic_learning_rate/div)
+    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=diffusion_learning_rate, betas=betas)
     # data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=config.critic_learning_rate/div)
 
     # scaler for normalizing observations
@@ -251,7 +274,7 @@ def train(config: Config):
         critic_action_reg_weight=config.critic_bc_coef,
         relative_state_reg_weight=config.relative_state_bc_coef,
         scaler=scaler,
-        no_q=True
+        no_q=no_q
     )
 
     # log

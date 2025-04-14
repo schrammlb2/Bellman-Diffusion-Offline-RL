@@ -4,6 +4,7 @@ from offlinerlkit.nets.vae import VAE
 from offlinerlkit.nets.ensemble_linear import EnsembleLinear
 from offlinerlkit.nets.rnn import RNNModel
 
+from offlinerlkit.nets.normal_mlp import ExtremelyNormalMLP, ExtremelyNormalResnet
 
 __all__ = [
     "MLP",
@@ -15,5 +16,7 @@ __all__ = [
     "MPDenseNet",
     "VAE",
     "EnsembleLinear",
-    "RNNModel"
+    "RNNModel", 
+    "ExtremelyNormalMLP",
+    "ExtremelyNormalResnet"
 ]

@@ -15,7 +15,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.optimization import get_scheduler
 
 
-class SequentialReBRACPolicy(ReBRACPolicy):
+class ReBRACSOMSimplePolicy(ReBRACPolicy):
     """
     TD3+BC <Ref: https://arxiv.org/abs/2106.06860>
     """
@@ -26,12 +26,10 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         critic1: nn.Module,
         critic2: nn.Module,
         diffusion_model: nn.Module,
-        # data_diffusion_model: nn.Module,
         actor_optim: torch.optim.Optimizer,
         critic1_optim: torch.optim.Optimizer,
         critic2_optim: torch.optim.Optimizer,
         diffusion_model_optim: torch.optim.Optimizer,
-        # data_diffusion_model_optim: torch.optim.Optimizer,
         tau: float = 0.005,
         gamma: float  = 0.99,
         max_action: float = 1.0,
@@ -66,14 +64,10 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             scaler=scaler,
             no_q = no_q
         )
-        critic_action_reg_weight = 0
 
         self.diffusion_model = diffusion_model
         self.diffusion_model_old = deepcopy(diffusion_model)
         self.diffusion_model_optim = diffusion_model_optim
-        # self.data_diffusion_model = data_diffusion_model
-        # self.data_diffusion_model_old = deepcopy(data_diffusion_model)
-        # self.data_diffusion_model_optim = data_diffusion_model_optim
 
         self.num_diffusion_iters = num_diffusion_iters
         self.noise_scheduler = DDPMScheduler(
@@ -89,18 +83,14 @@ class SequentialReBRACPolicy(ReBRACPolicy):
     def train(self) -> None:
         super().train()
         self.diffusion_model.train()
-        # self.data_diffusion_model.train()
 
 
     def eval(self) -> None:
         super().eval()
         self.diffusion_model.eval()
-        # self.data_diffusion_model.eval()
 
     def _sync_weight(self) -> None:
         super()._sync_weight()
-        # for o, n in zip(self.data_diffusion_model_old.parameters(), self.data_diffusion_model.parameters()):
-        #     o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
         for o, n in zip(self.diffusion_model_old.parameters(), self.diffusion_model.parameters()):
             o.data.copy_(o.data * (1.0 - self._tau) + n.data * self._tau)
     
@@ -198,16 +188,14 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         timesteps = timesteps.to(original_samples.device)
 
         sqrt_alpha_prod = self.noise_scheduler.alphas_cumprod[timesteps] ** 0.5
-        assert sqrt_alpha_prod.shape == original_samples.shape[:-1] + (1,)
-        # sqrt_alpha_prod = sqrt_alpha_prod.flatten()
-        # while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
-        #     sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
+        sqrt_alpha_prod = sqrt_alpha_prod.flatten()
+        while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
+            sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
 
         sqrt_one_minus_alpha_prod = (1 - self.noise_scheduler.alphas_cumprod[timesteps]) ** 0.5
-        assert sqrt_one_minus_alpha_prod.shape == original_samples.shape[:-1] + (1,)
-        # sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
-        # while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
-        #     sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
+        sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
+        while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
+            sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
 
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
@@ -292,53 +280,62 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         diffusion_loss.backward()
         self.diffusion_model_optim.step()
 
-
-        # data_prediction = self.data_diffusion_model(
-        #     x=noised_obss, step=self.map_i(diff_steps)
-        # )
-        # data_diffusion_loss = ((data_prediction - obss)**2).mean()
-        # self.data_diffusion_model_optim.zero_grad()
-        # data_diffusion_loss.backward()
-        # self.data_diffusion_model_optim.step()
-
         return next_diff_obss, diffusion_loss
 
-    def state_bc(self, obss, future_obss, valid_future_obss, a=None):
-        assert len(future_obss.shape) == 3
-        assert len(valid_future_obss.shape) == 3
-        assert valid_future_obss.shape == future_obss.shape[:2] + (1,)
-        k = future_obss.shape[1]
+    # def state_bc(self, obss, a=None):
+    #     if type(a) == type(None):
+    #         a = self.actor(obss)
+    #     batch_size = obss.shape[0]
+    #     diff_steps = torch.randint(0, 
+    #         self.num_diffusion_iters, 
+    #         (batch_size, 1)
+    #     ).long().to(obss.device)
+    #     eta = self.get_eta(diff_steps)
+
+    #     obss_noise = torch.randn(obss.shape, device=obss.device)
+    #     pred_obss = self.predict(
+    #             model=self.diffusion_model_old,
+    #             noise=obss_noise, obs=obss, a=a
+    #     ).detach()
+    #     noised_pred_obss  = self.add_noise(pred_obss, obss_noise, diff_steps)
+
+    #     obs_prediction = self.diffusion_model_old(
+    #         x=noised_pred_obss, obs=obss, 
+    #         step=self.map_i(diff_steps),
+    #         actions=a
+    #     )
+    #     data_obs_prediction = self.data_diffusion_model(
+    #         x=noised_pred_obss, step=self.map_i(diff_steps)
+    #     )
+    #     state_bc_penalty = self.relative_state_reg_weight*self.actor_action_reg_weight*(
+    #         eta*((data_obs_prediction - obs_prediction)**2).sum(-1)
+    #     ).mean()
+    #     return state_bc_penalty
+
+    def state_bc(self, obss, a=None):
         if type(a) == type(None):
             a = self.actor(obss)
+        batch_size = obss.shape[0]
         diff_steps = torch.randint(0, 
             self.num_diffusion_iters, 
-            valid_future_obss.shape
+            (batch_size, 1)
         ).long().to(obss.device)
+
+
         eta = self.get_eta(diff_steps)
 
-        obss_noise = torch.randn(future_obss.shape, device=obss.device)
-        # pred_obss = self.predict(
-        #         model=self.diffusion_model_old,
-        #         noise=obss_noise, obs=obss, a=a
-        # ).detach()
-        noised_pred_obss  = self.add_noise(future_obss, obss_noise, diff_steps)
-
-        empty_actions = torch.zeros((a.shape[0], k, a.shape[1]), device=obss.device)
-        unsqueezed_actions = a.unsqueeze(dim=1) + empty_actions
-        unsqueezed_obs = obss.unsqueeze(dim=1) + 0*noised_pred_obss
-        obs_prediction = self.diffusion_model_old(
-            x=noised_pred_obss, obs=unsqueezed_obs, 
+        shuffled_indices = torch.randperm(obss.shape[0])
+        shuffled_obss = obss[shuffled_indices]
+        obss_noise = torch.randn(obss.shape, device=obss.device)
+        noised_shuffled_obss = self.add_noise(shuffled_obss, obss_noise, diff_steps)
+        shuffled_obs_prediction = self.diffusion_model_old(
+            x=noised_shuffled_obss, obs=obss, 
             step=self.map_i(diff_steps),
-            actions=unsqueezed_actions
+            actions=a
         )
-        # data_obs_prediction = self.data_diffusion_model(
-        #     x=noised_pred_obss, step=self.map_i(diff_steps)
-        # )
         state_bc_penalty = self.relative_state_reg_weight*self.actor_action_reg_weight*(
-            (valid_future_obss*eta*(future_obss - obs_prediction)**2).sum(-1)
+            eta*(shuffled_obs_prediction - shuffled_obss)**2
         ).mean()
-        # mse = ((valid_future_obss*eta*(future_obss - obs_prediction)**2).sum(-1)).mean()
-        # state_bc_penalty = self.actor_action_reg_weight*self.relative_state_reg_weight*self.actor_action_reg_weight*mse/(mse.detach())
 
         return state_bc_penalty
 
@@ -354,7 +351,7 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             batch["next_observations"], batch["rewards"], batch["terminals"]
         valid_next_actions = batch["valid_next_actions"]
         batch_size = rewards.shape[0]
-
+        
         # update critic
         with torch.no_grad():
             noise = (torch.randn_like(actions) * self._policy_noise).clamp(-self._noise_clip, self._noise_clip)
@@ -364,7 +361,6 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             q1, q2 = self.critic1(obss, actions), self.critic2(obss, actions)
             with torch.no_grad():
                 next_q = torch.min(self.critic1_old(next_obss, next_actions), self.critic2_old(next_obss, next_actions))
-                # next_q -= 0.25*next_q.mean().detach()
                 bc_penalty = (
                     self.critic_action_reg_weight*valid_next_actions*(
                         (next_actions - batch["next_actions"])**2).sum(-1)
@@ -393,20 +389,32 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             a = self.actor(obss)
             bc_penalty = self.actor_action_reg_weight*((a - actions).pow(2).sum(-1)).mean()
             
-            state_bc_penalty = self.state_bc(obss, batch['future_obs'], batch['valid_future_obs'], a=a)
-            if self.use_q:
-                q = self.critic1(obss, a)
-                lmbda = 1 / q.abs().mean().detach()
-                # actor_loss = -lmbda * q.mean() + self.actor_action_reg_weight*((a - actions).pow(2)).mean()
-                # state_bc = self.relative_state_reg_weight*self.actor_action_reg_weight*state_bc_penalty/state_bc_penalty.detach()
-                state_bc = self.relative_state_reg_weight*self.actor_action_reg_weight*state_bc_penalty
-                actor_loss = -lmbda * q.mean() + bc_penalty + state_bc
+            # Generate random samples with same mean and variance as real samples
+            # And train the policy to go back to the real samples
+            rand_obss = self.rand_like(obss)
+            rand_a = self.actor(rand_obss)
+
+            # mix_state_bc = False
+            mix_state_bc = True
+            if mix_state_bc:
+            #Mix the batches
+                mixed_obss = torch.cat([obss, rand_obss], dim=0)
+                mixed_a = torch.cat([a, rand_a], dim=0)
+                state_bc_penalty = self.state_bc(mixed_obss, a=mixed_a)
+
+                if self.use_q:
+                    q = self.critic1(obss, a)
+                    lmbda = 1 / q.abs().mean().detach()
+                    # actor_loss = -lmbda * q.mean() + self.actor_action_reg_weight*((a - actions).pow(2)).mean()
+                    actor_loss = -lmbda * q.mean() + bc_penalty + state_bc_penalty
+                else: 
+                    actor_loss = bc_penalty + state_bc_penalty
+                #ReBRAC sums over action dim
+                #Try using ReBRAC coefficients and with the sum, see if this lets you match ReBRAC perf.
             else:
-                q = torch.tensor(1.)
-                state_bc = self.relative_state_reg_weight*self.actor_action_reg_weight*state_bc_penalty
-                actor_loss = bc_penalty + state_bc
-            # import ipdb
-            # ipdb.set_trace()
+                state_bc_penalty = self.state_bc(rand_obss, a=rand_a)
+                actor_loss = bc_penalty + state_bc_penalty
+
 
             # actor_loss = bc_penalty
 
@@ -423,10 +431,8 @@ class SequentialReBRACPolicy(ReBRACPolicy):
 
         return {
             "loss/actor": self._last_actor_loss,
-            "loss/q"   : self._last_q,
             "loss/bc"   : self._last_bc_penalty,
             "loss/state_bc"   : self._last_state_bc_penalty,
-            "loss/diffusion_loss": diffusion_loss.item(),
             "loss/critic1": critic1_loss.item(),
             "loss/critic2": critic2_loss.item()
         }

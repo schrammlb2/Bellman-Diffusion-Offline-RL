@@ -8,16 +8,16 @@ import numpy as np
 import torch
 
 
-from offlinerlkit.nets import MLP, NormedMLP, DenseNet, MPDenseNet#, AccordionMLP
+from offlinerlkit.nets import MLP, NormedMLP, DenseNet, MPDenseNet
 from offlinerlkit.modules import Actor, Critic
 from offlinerlkit.modules import DiffusionNetwork, UnconditionalDiffusionNetwork
 from offlinerlkit.utils.noise import GaussianNoise
-from offlinerlkit.utils.load_dataset import qlearning_dataset, qlearning_sequence_dataset
+from offlinerlkit.utils.load_dataset import qlearning_dataset
 from offlinerlkit.utils.scaler import StandardScaler
-from offlinerlkit.buffer import SequentialBuffer, RuntimeSequentialBuffer
+from offlinerlkit.buffer import NextActionBuffer
 from offlinerlkit.utils.logger import Logger, make_log_dirs
 from offlinerlkit.policy_trainer import MFPolicyTrainer
-from offlinerlkit.policy import SequentialReBRACPolicy
+from offlinerlkit.policy import ReBRACSOMSimplePolicy
 
 import pyrallis
 from dataclasses import dataclass
@@ -83,8 +83,7 @@ class Config:
     policy_freq: int = 2
     normalize_q: bool = True
     # training params
-    # dataset_name: str = "halfcheetah-medium-v2"
-    dataset_name: str = "hopper-medium-v2"
+    dataset_name: str = "halfcheetah-medium-v2"
     batch_size: int = 1024
     num_epochs: int = 1000
     num_updates_on_epoch: int = 1000
@@ -97,9 +96,6 @@ class Config:
     train_seed: int = 0
     eval_seed: int = 42
     relative_state_bc_coef: float = 1.0
-
-
-    k_samples: int = 16
 
     # def __post_init__(self):
     #     self.name = f"{self.name}-{self.dataset_name}-{str(uuid.uuid4())[:8]}"
@@ -133,8 +129,6 @@ def get_next_actions(dataset):
         return episode_return
 
     trajs.sort(key=compute_returns)
-    import ipdb
-    ipdb.set_trace()
 
     # normalize rewards
     dataset["rewards"] /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
@@ -149,8 +143,7 @@ def train(config: Config):
     # config.actor_bc_coef /= 3
     # config.relative_state_bc_coef *= 30
     # config.actor_learning_rate /= 3
-    no_q = True
-    config.relative_state_bc_coef *= 10
+    config.relative_state_bc_coef *= 10#100
     div = 100
     config.actor_learning_rate /= div
     diffusion_learning_rate = config.critic_learning_rate/div
@@ -167,7 +160,6 @@ def train(config: Config):
 
     env = gym.make(task)
     dataset = qlearning_dataset(env)
-    # dataset = qlearning_sequence_dataset(env, k=config.k_samples, gamma=config.gamma)
     if 'antmaze' in task:
         dataset["rewards"] -= 1.0
     obs_shape = env.observation_space.shape
@@ -176,24 +168,13 @@ def train(config: Config):
     
 
     # create buffer
-    # buffer = SequentialBuffer(
-    #     buffer_size=len(dataset["observations"]),
-    #     samples=config.k_samples,
-    #     obs_shape=obs_shape,
-    #     obs_dtype=np.float32,
-    #     action_dim=action_dim,
-    #     action_dtype=np.float32,
-    #     device=device
-    # )
-    buffer = RuntimeSequentialBuffer(
+    buffer = NextActionBuffer(
         buffer_size=len(dataset["observations"]),
-        samples=config.k_samples,
         obs_shape=obs_shape,
         obs_dtype=np.float32,
         action_dim=action_dim,
         action_dtype=np.float32,
-        device=device, 
-        gamma=config.gamma
+        device=device
     )
     buffer.load_dataset(dataset)
     obs_mean, obs_std = buffer.normalize_obs()
@@ -212,57 +193,34 @@ def train(config: Config):
     actor_backbone = MLP(input_dim=np.prod(obs_shape), hidden_dims=hidden_dims)
     critic1_backbone = NormedMLP(input_dim=np.prod(obs_shape)+action_dim, hidden_dims=hidden_dims)
     critic2_backbone = NormedMLP(input_dim=np.prod(obs_shape)+action_dim, hidden_dims=hidden_dims)
-    # critic1_backbone = AccordionMLP(
-    #     input_dim=np.prod(obs_shape)+action_dim, 
-    #     output_dim = 1,
-    #     wide_hidden_dim=1024, 
-    #     narrow_hidden_dim=512,
-    #     num_blocks=2,
-    #     activation=torch.nn.Tanh,
-    # )
-    # critic2_backbone = AccordionMLP(
-    #     input_dim=np.prod(obs_shape)+action_dim, 
-    #     output_dim = 1,
-    #     wide_hidden_dim=1024, 
-    #     narrow_hidden_dim=512,
-    #     num_blocks=2,
-    #     activation=torch.nn.Tanh,
-    # )
     actor = Actor(actor_backbone, action_dim, max_action=max_action, device=device)
     diffusion_backbone = NormedMLP(input_dim=2*np.prod(obs_shape)+action_dim + 1, 
         hidden_dims=diffusion_hidden_dims)
-    # data_diffusion_backbone = NormedMLP(input_dim=np.prod(obs_shape) + 1, 
-    #     hidden_dims=diffusion_hidden_dims)
 
     critic1 = Critic(critic1_backbone, device)
     critic2 = Critic(critic2_backbone, device)
     diffusion_model = DiffusionNetwork(
         diffusion_backbone, output_dim=np.prod(obs_shape), device=device)
-    # data_diffusion_model = UnconditionalDiffusionNetwork(
-    #     data_diffusion_backbone, output_dim=np.prod(obs_shape), device=device)
 
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.actor_learning_rate, betas=betas)
-    critic1_optim = torch.optim.Adam(critic1.parameters(), lr=config.critic_learning_rate, weight_decay=0.001)
-    critic2_optim = torch.optim.Adam(critic2.parameters(), lr=config.critic_learning_rate, weight_decay=0.001)
+    actor_optim = torch.optim.Adam(actor.parameters(), betas=betas, lr=config.actor_learning_rate)
+    critic1_optim = torch.optim.Adam(critic1.parameters(), betas=betas, lr=config.critic_learning_rate)
+    critic2_optim = torch.optim.Adam(critic2.parameters(), betas=betas, lr=config.critic_learning_rate)
 
-    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=diffusion_learning_rate, betas=betas)
-    # data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=config.critic_learning_rate/div)
+    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), betas=betas, lr=diffusion_learning_rate)
 
     # scaler for normalizing observations
     scaler = StandardScaler(mu=obs_mean, std=obs_std)
 
     # create policy
-    policy = SequentialReBRACPolicy(
+    policy = ReBRACSOMSimplePolicy(
         actor,
         critic1,
         critic2,
         diffusion_model,
-        # data_diffusion_model,
         actor_optim,
         critic1_optim,
         critic2_optim,
         diffusion_optim,
-        # data_diffusion_optim,
         tau=config.tau,
         gamma=config.gamma,
         max_action=max_action,
@@ -274,7 +232,7 @@ def train(config: Config):
         critic_action_reg_weight=config.critic_bc_coef,
         relative_state_reg_weight=config.relative_state_bc_coef,
         scaler=scaler,
-        no_q=no_q
+        no_q=False
     )
 
     # log

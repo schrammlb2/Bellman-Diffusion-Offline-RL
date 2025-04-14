@@ -14,4 +14,4 @@ python setup.py install
 
 
 
-/home/liam/Desktop/offline_rl/OfflineRL-Kit/pyrallis_scripts/run_rebrac_som.py --config=/home/liam/Desktop/offline_rl/OfflineRL-Kit/pyrallis_scripts/configs/offline/rebrac/hopper/medium_v2.yaml --train_seed=0
+python /home/liam/Desktop/offline_rl/OfflineRL-Kit/pyrallis_scripts/run_rebrac_som.py --config=/home/liam/Desktop/offline_rl/OfflineRL-Kit/pyrallis_scripts/configs/offline/rebrac/hopper/medium_v2.yaml --train_seed=0

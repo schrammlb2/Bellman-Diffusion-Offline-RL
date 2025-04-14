@@ -193,13 +193,15 @@ def train(config: Config):
     data_diffusion_model = UnconditionalDiffusionNetwork(
         data_diffusion_backbone, output_dim=np.prod(obs_shape), device=device)
 
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.actor_learning_rate)
-    critic1_optim = torch.optim.Adam(critic1.parameters(), lr=config.critic_learning_rate)
-    critic2_optim = torch.optim.Adam(critic2.parameters(), lr=config.critic_learning_rate)
+    betas=(0.9, 0.999) # Default setting
+    # betas=(0.8, 0.95)
+    actor_optim = torch.optim.Adam(actor.parameters(), betas=betas, lr=config.actor_learning_rate)
+    critic1_optim = torch.optim.Adam(critic1.parameters(), betas=betas, lr=config.critic_learning_rate)
+    critic2_optim = torch.optim.Adam(critic2.parameters(), betas=betas, lr=config.critic_learning_rate)
 
     div=1
-    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), lr=config.critic_learning_rate/div)
-    data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), lr=config.critic_learning_rate/div)
+    diffusion_optim = torch.optim.Adam(diffusion_model.parameters(), betas=betas, lr=config.critic_learning_rate/div)
+    data_diffusion_optim = torch.optim.Adam(data_diffusion_model.parameters(), betas=betas, lr=config.critic_learning_rate/div)
 
     # scaler for normalizing observations
     scaler = StandardScaler(mu=obs_mean, std=obs_std)

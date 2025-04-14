@@ -1,6 +1,8 @@
 # rootdir=oril_log
-rootdir=SOMBC_log
-reward=false
+# rootdir=SOMBC_log
+# rootdir=sequential_log_merged
+rootdir=seq_bc_log
+reward=true
 
 for task in "hopper-medium-v2" "halfcheetah-medium-v2"  "walker2d-medium-v2"\
  	"hopper-medium-expert-v2" "halfcheetah-medium-expert-v2"  "walker2d-medium-expert-v2"\
@@ -19,16 +21,21 @@ do
 
 	#Offline RL 
 	if [ "$reward" = true ] ; then
-		python run_example/plotter.py --task=$task --algos rebrac rebrac_som_no_q --root-dir=$rootdir --title=$task
+		python run_example/plotter.py --task=$task --algos rebrac rebrac_som rebrac_seq_som --root-dir=$rootdir --title=$task
+		# python run_example/plotter.py --task=$task --algos rebrac_som --root-dir=$rootdir --title=$task
 	fi
 	#Imitation learning 
 	# python run_example/plotter.py --task=$task --algos rebracno_q rebrac_som_no_q smodice smodice_layernorm oril --root-dir=$rootdir --title=$task
 
 	if [ "$reward" = false ] ; then
-		python run_example/plotter.py --task=$task --algos rebracno_q rebrac_som_no_q smodice oril --root-dir=$rootdir --title=$task
+		# python run_example/plotter.py --task=$task --algos rebracno_q rebrac_som_no_q smodice oril --root-dir=$rootdir --title=$task
+		# python run_example/plotter.py --task=$task --algos rebrac rebrac_som rebracno_q rebrac_seq_som rebrac_seq_som_no_q smodice_layernorm --root-dir=$rootdir --title=$task
+		python run_example/plotter.py --task=$task --algos rebracno_q rebrac_seq_som_no_q smodice_layernorm --root-dir=$rootdir --title=$task
+		# python run_example/plotter.py --task=$task --algos rebrac_seq_som_no_q --root-dir=$rootdir --title=$task
 	fi
 done
 
 if [ "$reward" = false ] ; then
-	python run_example/plotter.py --task="walker2d-medium-expert-v2" --algos rebracno_q rebrac_som_no_q oril --root-dir=$rootdir --title=$task
+	# python run_example/plotter.py --task="walker2d-medium-expert-v2" --algos rebrac rebrac_som rebracno_q rebrac_seq_som_no_q --root-dir=$rootdir --title=$task
+	python run_example/plotter.py --task="walker2d-medium-expert-v2" --algos rebracno_q rebrac_seq_som_no_q --root-dir=$rootdir --title=$task
 fi

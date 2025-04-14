@@ -48,6 +48,8 @@ def merge_csv(root_dir, query_file, query_x, query_y):
             if np.isnan(line[1]): continue
             content.append(line)
         results[csv_file] = content
+    # import ipdb
+    # ipdb.set_trace()
     assert len(results) > 0
     sorted_keys = sorted(results.keys())
     sorted_values = [results[k][1:] for k in sorted_keys]
