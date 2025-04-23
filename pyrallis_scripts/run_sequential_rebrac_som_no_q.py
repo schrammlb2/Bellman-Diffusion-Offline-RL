@@ -149,13 +149,22 @@ def train(config: Config):
     # config.actor_bc_coef /= 3
     # config.relative_state_bc_coef *= 30
     # config.actor_learning_rate /= 3
-    no_q = False
-    config.relative_state_bc_coef *= 10
-    div = 100
+    no_q = True
+    #regular settings
+    # config.relative_state_bc_coef *= 10
+    # div = 100
+
+    # halfcheetah settings: 
+    config.relative_state_bc_coef = 100
+    div = 30
+
     config.actor_learning_rate /= div
     diffusion_learning_rate = config.critic_learning_rate/div
     betas = (.9, .999) #Default
-    # betas = (.99, .9999)
+
+    # halfcheetah settings: 
+    # config.relative_state_bc_coef = 100
+    # div = 10
 
 
 

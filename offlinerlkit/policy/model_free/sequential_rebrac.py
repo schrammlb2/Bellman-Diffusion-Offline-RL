@@ -45,6 +45,8 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         scaler: StandardScaler = None, 
         no_q = False,
         num_diffusion_iters: int = 10,
+        # prediction_type="sample"
+        prediction_type="epsilon"
     ) -> None:
 
         super().__init__(
@@ -76,12 +78,13 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         # self.data_diffusion_model_optim = data_diffusion_model_optim
 
         self.num_diffusion_iters = num_diffusion_iters
+        self.prediction_type = prediction_type
         self.noise_scheduler = DDPMScheduler(
             num_train_timesteps=num_diffusion_iters,
             beta_schedule="squaredcos_cap_v2",
             clip_sample=False,
             # our network predicts noise (instead of denoised action)
-            prediction_type="sample",
+            prediction_type=prediction_type,
         )
         self.relative_state_reg_weight = relative_state_reg_weight
 
@@ -178,7 +181,7 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             else:
                 variance = (self.noise_scheduler._get_variance(t, predicted_variance=predicted_variance) ** 0.5) * variance_noise
 
-        pred_prev_sample = pred_prev_sample #+ variance
+        pred_prev_sample = pred_prev_sample + variance
 
         if not return_dict:
             return (pred_prev_sample,)
@@ -241,6 +244,15 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         eta_norm = eta/eta.mean()
         return eta_norm
 
+    def get_epsilon_eta(self, timesteps):
+        t = timesteps.cpu()
+        alpha = self.noise_scheduler.alphas[t].to(timesteps.device)
+        alpha_prod = self.noise_scheduler.alphas_cumprod[t].to(timesteps.device)
+        beta = 1-alpha
+        eta = (beta)/(alpha*(1-alpha_prod))
+        eta_norm = eta/eta.mean()
+        return eta_norm
+
     def map_i(self, t):
         return -1 + 2*t/self.num_diffusion_iters
 
@@ -280,10 +292,19 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             step=self.map_i(diff_steps),
             actions=actions)
 
-        diffusion_loss = (
-            (1-self._gamma)*(current_prediction - obss)**2 + 
-            (self._gamma  )*(next_prediction -  next_target)**2
-        ).mean()
+        if self.prediction_type == "sample":
+            diffusion_loss = (
+                (1-self._gamma)*(current_prediction - obss)**2 + 
+                (self._gamma  )*(next_prediction -  next_target)**2
+            ).mean()
+        elif self.prediction_type == "epsilon":            
+            diffusion_loss = (
+                (1-self._gamma)*(current_prediction - obss_noise)**2 + 
+                (self._gamma  )*(next_prediction -  next_target)**2
+            ).mean()
+        else: 
+            print("prediction_type not recognized")
+            assert False
         diffusion_list.append(diffusion_loss)
         diffusion_loss = torch.stack(diffusion_list).mean()
 
@@ -314,7 +335,6 @@ class SequentialReBRACPolicy(ReBRACPolicy):
             self.num_diffusion_iters, 
             valid_future_obss.shape
         ).long().to(obss.device)
-        eta = self.get_eta(diff_steps)
 
         obss_noise = torch.randn(future_obss.shape, device=obss.device)
         # pred_obss = self.predict(
@@ -326,17 +346,27 @@ class SequentialReBRACPolicy(ReBRACPolicy):
         empty_actions = torch.zeros((a.shape[0], k, a.shape[1]), device=obss.device)
         unsqueezed_actions = a.unsqueeze(dim=1) + empty_actions
         unsqueezed_obs = obss.unsqueeze(dim=1) + 0*noised_pred_obss
-        obs_prediction = self.diffusion_model_old(
-            x=noised_pred_obss, obs=unsqueezed_obs, 
-            step=self.map_i(diff_steps),
-            actions=unsqueezed_actions
-        )
-        # data_obs_prediction = self.data_diffusion_model(
-        #     x=noised_pred_obss, step=self.map_i(diff_steps)
-        # )
-        state_bc_penalty = self.relative_state_reg_weight*self.actor_action_reg_weight*(
-            (valid_future_obss*eta*(future_obss - obs_prediction)**2).sum(-1)
-        ).mean()
+        if self.prediction_type == "sample":
+            eta = self.get_eta(diff_steps)
+            obs_prediction = self.diffusion_model_old(
+                x=noised_pred_obss, obs=unsqueezed_obs, 
+                step=self.map_i(diff_steps),
+                actions=unsqueezed_actions
+            )
+            state_bc_penalty = self.relative_state_reg_weight*self.actor_action_reg_weight*(
+                (valid_future_obss*eta*(future_obss - obs_prediction)**2).sum(-1)
+            ).mean()
+        elif self.prediction_type == "epsilon":
+            epsilon_eta = self.get_epsilon_eta(diff_steps)
+            noise_prediction = self.diffusion_model_old(
+                x=noised_pred_obss, obs=unsqueezed_obs, 
+                step=self.map_i(diff_steps),
+                actions=unsqueezed_actions
+            )
+            state_bc_penalty = self.relative_state_reg_weight*self.actor_action_reg_weight*(
+                (valid_future_obss*epsilon_eta*(obss_noise - noise_prediction)**2).sum(-1)
+            ).mean()
+
         # mse = ((valid_future_obss*eta*(future_obss - obs_prediction)**2).sum(-1)).mean()
         # state_bc_penalty = self.actor_action_reg_weight*self.relative_state_reg_weight*self.actor_action_reg_weight*mse/(mse.detach())
 

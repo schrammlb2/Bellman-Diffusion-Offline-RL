@@ -4,6 +4,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 from typing import Union, Optional
 
+residual = True
+residual = False
 
 class DiffusionNetwork(nn.Module):
     def __init__(
@@ -19,6 +21,8 @@ class DiffusionNetwork(nn.Module):
         latent_dim = getattr(backbone, "output_dim")
         output_dim = output_dim
         self.last = nn.Linear(latent_dim, output_dim).to(device)
+        if residual:
+            nn.init.zeros_(self.last.weight)
 
     def forward(
         self,
@@ -38,7 +42,7 @@ class DiffusionNetwork(nn.Module):
             obs = torch.cat([x, obs, step, actions], dim=-1)
         logits = self.backbone(obs)
         output = self.last(logits)
-        return output
+        return output if not residual else x + output
 
     def norm_weights(self):
         self.backbone.norm_weights()
@@ -57,7 +61,7 @@ class GenericDiffusionNetwork(DiffusionNetwork):
         inpt = torch.cat([x, condition, step], dim=1)
         logits = self.backbone(inpt)
         output = self.last(logits)
-        return output
+        return output if not residual else x + output
 
 
 
@@ -74,6 +78,8 @@ class UnconditionalDiffusionNetwork(nn.Module):
         self.backbone = backbone.to(device)
         latent_dim = getattr(backbone, "output_dim")
         self.last = nn.Linear(latent_dim, output_dim).to(device)
+        if residual:
+            nn.init.zeros_(self.last.weight)
 
     def forward(
         self,
@@ -84,7 +90,7 @@ class UnconditionalDiffusionNetwork(nn.Module):
         x = torch.cat([x, step], dim=1)
         logits = self.backbone(x)
         output = self.last(logits)
-        return output
+        return output if not residual else x + output
 
     def norm_weights(self):
         self.backbone.norm_weights()
@@ -105,6 +111,9 @@ class RewardDiffusionModel(nn.Module):
         output_dim = obs_dim
         self.state_layer = nn.Linear(latent_dim, output_dim).to(device)
         self.reward_layer = nn.Linear(latent_dim, 1).to(device)
+        if residual:
+            self.state_layer.weight.fill_(0)
+            self.reward_layer.weight.fill_(0)
 
     def forward(
         self,
@@ -118,11 +127,14 @@ class RewardDiffusionModel(nn.Module):
         step = torch.as_tensor(step, device=self.device, dtype=torch.float32)
         if actions is not None:
             actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32).flatten(1)
-            obs = torch.cat([x, obs, step, actions], dim=1)
-        logits = self.backbone(obs)
+            cat_obs = torch.cat([x, obs, step, actions], dim=1)
+        logits = self.backbone(cat_obs)
         state_output = self.state_layer(logits)
         reward_output = self.reward_layer(logits)
-        return state_output, reward_output
+        if residual: 
+            return state_output + obs, reward_output + x
+        else:
+            return state_output, reward_output
 
     def norm_weights(self):
         self.backbone.norm_weights()

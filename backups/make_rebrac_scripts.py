@@ -40,7 +40,7 @@ for alg in alg_list:
 		os.mkdir(new_dataset)
 		run_dataset_loc = base_dir +  f"/run_{dataset}_scripts.sh"
 		with open(run_dataset_loc, "a") as file:
-			file.write(f"cd {base_dir}/{dataset}/")
+			file.write(f"cd ~/Desktop/Bellman-Diffusion-Offline-RL/{base_dir}/{dataset}/")
 			for env in envs:
 				filename = f"run_{env}_{data_map(dataset)}.sh"
 				run_env_loc = new_dataset + "/" + filename
@@ -57,7 +57,7 @@ for alg in alg_list:
 			shutil.copyfile(template, run_env_loc)
 			with open(run_env_loc, "a") as file:
 				file.write("\n")
-				file.write(f"cd {base_dir}/{dataset}/{env}")
+				file.write(f"cd ~/Desktop/Bellman-Diffusion-Offline-RL/{base_dir}/{dataset}/{env}")
 				file.write(f"\n")
 
 			for seed in range(4):
@@ -66,8 +66,7 @@ for alg in alg_list:
 				shutil.copyfile(template, loc)
 				with open(loc, "a") as file:
 					file.write("\n\n")
-					# file.write(method + f"{env}/{dataset}_v2.yaml --train_seed={seed}")
-					file.write(f"python {method}{env}/{dataset}_v2.yaml --train_seed={seed}")
+					file.write(method + f"{env}/{dataset}_v2.yaml --train_seed={seed}")
 
 				with open(run_env_loc, "a") as file:
 					file.write("\n")
