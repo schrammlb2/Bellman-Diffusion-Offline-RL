@@ -100,7 +100,7 @@ class Config:
 
 
     k_samples: int = 16
-
+    div: float = 1.0
     # def __post_init__(self):
     #     self.name = f"{self.name}-{self.dataset_name}-{str(uuid.uuid4())[:8]}"
 
@@ -152,11 +152,11 @@ def train(config: Config):
     no_q = True
     #regular settings
     # config.relative_state_bc_coef *= 10
-    # div = 100
+    div = config.div#100
 
     # halfcheetah settings: 
-    config.relative_state_bc_coef = 100
-    div = 30
+    #config.relative_state_bc_coef = 100
+    #div = 30
 
     config.actor_learning_rate /= div
     diffusion_learning_rate = config.critic_learning_rate/div
@@ -170,7 +170,7 @@ def train(config: Config):
 
     # create env and dataset
     task = config.dataset_name
-    algo_name = config.name + "_som"
+    algo_name = config.name + "_sequential_som_no_q"
     device = ("cuda" if torch.cuda.is_available() else "cpu")
     hidden_dims = [config.hidden_dim]*config.critic_n_hiddens
 

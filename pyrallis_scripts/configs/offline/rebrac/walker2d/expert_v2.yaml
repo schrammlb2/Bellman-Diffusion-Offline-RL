@@ -7,7 +7,7 @@ critic_bc_coef: 0.5
 critic_learning_rate: 0.001
 critic_ln: true
 critic_n_hiddens: 3
-relative_state_bc_coef: 0.1
+relative_state_bc_coef: 10.0
 dataset_name: walker2d-expert-v2
 eval_episodes: 10
 eval_every: 5
@@ -27,3 +27,4 @@ policy_noise: 0.2
 project: ReBRAC
 tau: 0.005
 train_seed: 0
+div: 100.0

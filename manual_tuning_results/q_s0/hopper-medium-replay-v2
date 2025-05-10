@@ -1,0 +1,72 @@
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 1
+	result: {'reward': 87.46152868747672}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 10
+	result: {'reward': 89.13296627371003}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 100
+	result: {'reward': 100.47418729279528}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 1
+	result: {'reward': 81.26993181643252}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 10
+	result: {'reward': 98.69229759955897}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 100
+	result: {'reward': 100.54255168994074}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 1
+	result: {'reward': 93.062207224583}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 10
+	result: {'reward': 81.58094880253378}
+}
+
+{
+	dataset_name: hopper-medium-replay-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 100
+	result: {'reward': 87.89082006206259}
+}
+

@@ -1,0 +1,72 @@
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 1
+	result: {'reward': 109.9794895444877}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 10
+	result: {'reward': 111.48585175363607}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 100
+	result: {'reward': 109.16384754292059}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 1
+	result: {'reward': 110.72773657948103}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 10
+	result: {'reward': 111.09415643795441}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 100
+	result: {'reward': 108.88901536710746}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 1
+	result: {'reward': 59.463892308898856}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 10
+	result: {'reward': 100.69437464793961}
+}
+
+{
+	dataset_name: hopper-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 100
+	result: {'reward': 38.81656204387231}
+}
+

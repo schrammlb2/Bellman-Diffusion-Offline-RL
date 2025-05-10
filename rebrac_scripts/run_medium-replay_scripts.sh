@@ -1,4 +1,4 @@
-cd ~/Desktop/Bellman-Diffusion-Offline-RL//home/liam/Desktop/offline_rl/OfflineRL-Kit/rebrac_scripts/medium-replay/
+cd /common/home/lbs105/Desktop/offline/Bellman-Diffusion-Offline-RL/rebrac_scripts/medium-replay/
 bash run_hopper_mr.sh
 sleep 30s
 

@@ -7,7 +7,7 @@ critic_bc_coef: 0.01
 critic_learning_rate: 0.001
 critic_ln: true
 critic_n_hiddens: 3
-relative_state_bc_coef: 1.0
+relative_state_bc_coef: 100.0
 dataset_name: hopper-medium-v2
 eval_episodes: 10
 eval_every: 5
@@ -28,3 +28,4 @@ policy_noise: 0.2
 project: ReBRAC
 tau: 0.005
 train_seed: 0
+div: 100.0

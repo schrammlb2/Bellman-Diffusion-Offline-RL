@@ -1,0 +1,72 @@
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 1
+	result: {'reward': 100.045690641661}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 10
+	result: {'reward': 99.10577084256798}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 100
+	result: {'reward': 83.33641434458539}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 1
+	result: {'reward': 99.06710104292627}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 10
+	result: {'reward': 91.95688165590781}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 100
+	result: {'reward': 87.24099248790976}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 1
+	result: {'reward': 94.36882190073634}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 10
+	result: {'reward': 96.91999588909758}
+}
+
+{
+	dataset_name: halfcheetah-medium-expert-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 100
+	result: {'reward': 91.27986479705025}
+}
+

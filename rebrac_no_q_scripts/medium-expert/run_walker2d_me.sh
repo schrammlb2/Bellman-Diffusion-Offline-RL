@@ -3,17 +3,17 @@
 
 epoch=1000
 source ~/.bashrc
-cd ~/Desktop/Bellman-Diffusion-Offline-RL/
-conda init bash
-conda activate offline_2
+cd ~/Desktop/offline/Bellman-Diffusion-Offline-RL/
+# conda init bash
+conda activate offline
 
 echo "hello"
 
-python setup.py install
+#python setup.py install
 
 
 
-cd ~/Desktop/Bellman-Diffusion-Offline-RL//home/liam/Desktop/offline_rl/OfflineRL-Kit/rebrac_no_q_scripts/medium-expert/walker2d
+cd /common/home/lbs105/Desktop/offline/Bellman-Diffusion-Offline-RL/rebrac_no_q_scripts/medium-expert/walker2d
 
 sbatch -G 1 me_walk_s0.sh
 sleep 30s

@@ -1,0 +1,72 @@
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 1
+	result: {'reward': 68.84263139133522}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 10
+	result: {'reward': 68.99531798265535}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 1
+	div: 100
+	result: {'reward': 74.77995723078543}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 1
+	result: {'reward': 63.51723258928696}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 10
+	result: {'reward': 69.646315523426}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 10
+	div: 100
+	result: {'reward': 70.78017271713821}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 1
+	result: {'reward': 50.78510699458366}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 10
+	result: {'reward': 52.67452845954309}
+}
+
+{
+	dataset_name: walker2d-medium-v2
+	seed: 0
+	relative_state_bc_coef: 100
+	div: 100
+	result: {'reward': 15.627229822359357}
+}
+

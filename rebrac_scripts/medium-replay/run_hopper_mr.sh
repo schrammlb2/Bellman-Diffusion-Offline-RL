@@ -3,17 +3,17 @@
 
 epoch=1000
 source ~/.bashrc
-cd ~/Desktop/Bellman-Diffusion-Offline-RL/
-conda init bash
-conda activate offline_2
+cd ~/Desktop/offline/Bellman-Diffusion-Offline-RL/
+# conda init bash
+conda activate offline
 
 echo "hello"
 
-python setup.py install
+#python setup.py install
 
 
 
-cd ~/Desktop/Bellman-Diffusion-Offline-RL//home/liam/Desktop/offline_rl/OfflineRL-Kit/rebrac_scripts/medium-replay/hopper
+cd /common/home/lbs105/Desktop/offline/Bellman-Diffusion-Offline-RL/rebrac_scripts/medium-replay/hopper
 
 sbatch -G 1 mr_hop_s0.sh
 sleep 30s

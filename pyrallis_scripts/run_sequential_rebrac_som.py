@@ -100,7 +100,7 @@ class Config:
 
 
     k_samples: int = 16
-
+    div: float = 1
     # def __post_init__(self):
     #     self.name = f"{self.name}-{self.dataset_name}-{str(uuid.uuid4())[:8]}"
 
@@ -151,8 +151,8 @@ def train(config: Config):
     # config.actor_learning_rate /= 3
     no_q = False
     # config.relative_state_bc_coef *= 10
-    config.relative_state_bc_coef = 100
-    div = 30
+    #config.relative_state_bc_coef = 100
+    div = config.div#30
     config.actor_learning_rate /= div
     diffusion_learning_rate = config.critic_learning_rate/div
     betas = (.9, .999) #Default
@@ -162,7 +162,7 @@ def train(config: Config):
 
     # create env and dataset
     task = config.dataset_name
-    algo_name = config.name + "_som"
+    algo_name = config.name + "_sequential_som"
     device = ("cuda" if torch.cuda.is_available() else "cpu")
     hidden_dims = [config.hidden_dim]*config.critic_n_hiddens
 

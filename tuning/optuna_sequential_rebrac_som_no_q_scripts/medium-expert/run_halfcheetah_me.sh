@@ -1,0 +1,19 @@
+#!/bin/bash -l
+#SBATCH --output=logfile
+
+epoch=1000
+source ~/.bashrc
+cd ~/Desktop/offline/Bellman-Diffusion-Offline-RL/
+# conda init bash
+conda activate offline
+
+echo "hello"
+
+#python setup.py install
+
+
+
+cd /common/home/lbs105/Desktop/offline/Bellman-Diffusion-Offline-RL/tuning/optuna_sequential_rebrac_som_no_q_scripts/medium-expert/halfcheetah
+
+sbatch -G 2 me_hc_s0.sh
+sleep 30s
